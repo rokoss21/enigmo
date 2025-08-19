@@ -8,8 +8,8 @@
 
 [![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
-[![License](https://img.shields.io/github/license/rokoss21/emigmo?style=for-the-badge)](LICENSE)
-[![Build Status](https://img.shields.io/github/workflow/status/rokoss21/emigmo/CI?style=for-the-badge)](https://github.com/rokoss21/emigmo/actions)
+[![License](https://img.shields.io/github/license/rokoss21/enigmo?style=for-the-badge)](LICENSE)
+[![Build Status](https://img.shields.io/github/workflow/status/rokoss21/enigmo/CI?style=for-the-badge)](https://github.com/rokoss21/enigmo/actions)
 [![Security](https://img.shields.io/badge/Security-E2EE-green?style=for-the-badge&logo=shield&logoColor=white)]()
 [![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android%20%7C%20Web-blue?style=for-the-badge)]()
 
@@ -505,7 +505,7 @@ func WebSocketHandler(ws: WebSocketConnection) {
 
 ```bash
 # Clone and setup everything
-git clone https://github.com/rokoss21/emigmo.git
+git clone https://github.com/rokoss21/enigmo.git
 cd enigmo
 
 # Install all dependencies
@@ -769,7 +769,7 @@ flutter analyze
 
 ### 🎯 **Want to contribute to the roadmap?**
 
-[📝 Suggest Feature](https://github.com/rokoss21/emigmo/issues/new?template=feature_request.md) • [🐛 Report Bug](https://github.com/rokoss21/emigmo/issues/new?template=bug_report.md) • [💬 Join Discussion](https://github.com/rokoss21/emigmo/discussions)
+[📝 Suggest Feature](https://github.com/rokoss21/enigmo/issues/new?template=feature_request.md) • [🐛 Report Bug](https://github.com/rokoss21/enigmo/issues/new?template=bug_report.md) • [💬 Join Discussion](https://github.com/rokoss21/enigmo/discussions)
 
 </div>
 
