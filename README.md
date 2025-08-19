@@ -130,35 +130,98 @@
 4. **✅ Digital Signing**: Ed25519 signature for message integrity
 5. **📡 Zero-Knowledge Routing**: Server forwards without decryption
 
-```mermaid
-graph TD
-    subgraph Client["📱 Enigmo Flutter App"]
-        A["🎨 UI/UX Layer"]
-        B["⚙️ Services Layer"]
-        C["🔐 Crypto Engine"]
-        D["💾 Secure Storage"]
-    end
+### 🏗️ **System Architecture Diagram**
 
-    subgraph Server["🖥️ Enigmo Dart Server"]
-        E["🔌 WebSocket Handler"]
-        F["👥 User Manager"]
-        G["📨 Message Router"]
-        H["🌐 REST API"]
-    end
+<table>
+<tr>
+<td width="45%" align="center">
 
-    A --> B
-    B --> C
-    C --> D
+**📱 ENIGMO FLUTTER APP**
 
-    B -.->|"WebSocket (E2EE)"| E
-    B -.->|"REST (HTTPS)"| H
+</td>
+<td width="10%" align="center">
 
-    E --> F
-    E --> G
+**🔄 COMMUNICATION**
 
-    style C fill:#f9f,stroke:#333,stroke-width:2px
-    style G fill:#ccf,stroke:#333,stroke-width:2px
+</td>
+<td width="45%" align="center">
+
+**🖥️ ENIGMO DART SERVER**
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
 ```
+┌─────────────────────────┐
+│    🎨 UI/UX Layer       │
+└─────────┬───────────────┘
+          │
+┌─────────▼───────────────┐
+│   ⚙️ Services Layer     │
+└─────────┬───────────────┘
+          │
+┌─────────▼───────────────┐
+│   🔐 Crypto Engine      │ ← Core
+└─────────┬───────────────┘
+          │
+┌─────────▼───────────────┐
+│   💾 Secure Storage     │
+└─────────────────────────┘
+```
+
+**Key Responsibilities:**
+- 🔑 Key generation & management
+- 🔐 Message encryption/decryption
+- ✍️ Digital signature creation
+- 💾 Secure local storage
+- 🎨 Real-time UI updates
+
+</td>
+<td align="center" valign="middle">
+
+**🔌 WebSocket**  
+*(E2EE Messages)*
+
+**⬇️**
+
+**🌐 REST API**  
+*(HTTPS)*
+
+**⬇️**
+
+**🔒 Zero-Knowledge**  
+*Server never sees plaintext*
+
+</td>
+<td valign="top">
+
+```
+┌─────────────────────────┐
+│  🔌 WebSocket Handler   │
+└─────────┬───────┬───────┘
+          │       │
+┌─────────▼───────▼───────┐
+│   👥 User Manager       │
+│   📨 Message Router     │ ← Core
+└─────────┬───────────────┘
+          │
+┌─────────▼───────────────┐
+│    🌐 REST API          │
+└─────────────────────────┘
+```
+
+**Key Responsibilities:**
+- 👥 Public key directory
+- 📨 Zero-knowledge forwarding
+- 🔌 Real-time connections
+- 📊 Health monitoring
+- ⚖️ Horizontal scaling
+
+</td>
+</tr>
+</table>
 
 ### Client State Lifecycle
 
