@@ -1,6 +1,6 @@
 {
-    "name": "anongram_app",
-    "short_name": "anongram_app",
+    "name": "Enigmo",
+    "short_name": "Enigmo",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

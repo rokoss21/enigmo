@@ -324,21 +324,23 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         title: GestureDetector(
           onTap: _currentUserId != null ? () => _copyUserId() : null,
           child: Text(
-            _currentUserId != null ? 'ID: $_currentUserId' : 'Anongram',
+            _currentUserId != null ? 'ID: $_currentUserId' : 'Enigmo',
             style: const TextStyle(
               fontFamily: 'monospace',
               fontSize: 16,
+              color: Colors.white,
             ),
           ),
         ),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: scheme.surfaceVariant,
         actions: [
-          // Connection indicator
+          // Connection indicator (green online, red offline)
           Container(
             margin: const EdgeInsets.only(right: 16),
             child: Row(
@@ -346,14 +348,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
               children: [
                 Icon(
                   _isConnected ? Icons.wifi : Icons.wifi_off,
-                  color: _isConnected ? Colors.green : Colors.red,
+                  color: _isConnected ? Colors.green : scheme.error,
                   size: 20,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   _isConnected ? 'Online' : 'Offline',
                   style: TextStyle(
-                    color: _isConnected ? Colors.green : Colors.red,
+                    color: _isConnected ? Colors.green : scheme.error,
                     fontSize: 12,
                   ),
                 ),
@@ -418,6 +420,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   Widget _buildChatTile(Chat chat) {
+    final scheme = Theme.of(context).colorScheme;
     final online = chat.isOnline || _networkService.isUserOnline(chat.id);
     return InkWell(
       onTap: () async {
@@ -462,7 +465,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               children: [
                 CircleAvatar(
                   radius: 25,
-                  backgroundColor: const Color(0xFF40A7E3),
+                  backgroundColor: scheme.surfaceVariant,
                   child: Text(
                     chat.name[0].toUpperCase(),
                     style: const TextStyle(
@@ -479,10 +482,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     width: 14,
                     height: 14,
                     decoration: BoxDecoration(
-                      color: online ? const Color(0xFF4CAF50) : Colors.grey,
+                      color: online ? Colors.green : scheme.onSurfaceVariant,
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: const Color(0xFF0F1419),
+                        color: scheme.surface,
                         width: 2,
                       ),
                     ),
@@ -514,8 +517,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         _formatTime(chat.lastActivity),
                         style: TextStyle(
                           color: chat.unreadCount > 0
-                              ? const Color(0xFF40A7E3)
-                              : Colors.white54,
+                              ? Colors.white
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 13,
                         ),
                       ),
@@ -542,13 +545,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF40A7E3),
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
                             chat.unreadCount.toString(),
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: Colors.black,
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
                             ),
@@ -598,36 +601,56 @@ class _ChatListScreenState extends State<ChatListScreen> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
+        final scheme = Theme.of(context).colorScheme;
         return AlertDialog(
-          title: const Text('Add user'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.copy),
-                title: const Text('Copy my ID'),
-                subtitle: Text(_currentUserId ?? ''),
-                onTap: () {
-                  _copyUserId();
-                  Navigator.of(context).pop();
-                },
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.person_add),
-                title: const Text('Add to chat'),
-                subtitle: const Text('Enter user ID'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _showAddUserByIdDialog();
-                },
-              ),
-            ],
+          backgroundColor: scheme.surfaceVariant,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+          contentPadding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+          actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          title: const Text(
+            'Add user',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 260),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  leading: const Icon(Icons.copy, color: Colors.white),
+                  title: const Text('Copy my ID', style: TextStyle(color: Colors.white)),
+                  subtitle: Text(
+                    _currentUserId ?? '',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                  onTap: () {
+                    _copyUserId();
+                    Navigator.of(context).pop();
+                  },
+                ),
+                Divider(color: scheme.outline.withOpacity(0.4), height: 1),
+                ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  leading: const Icon(Icons.person_add, color: Colors.white),
+                  title: const Text('Add to chat', style: TextStyle(color: Colors.white)),
+                  subtitle: Text('Enter user ID', style: TextStyle(color: scheme.onSurfaceVariant)),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _showAddUserByIdDialog();
+                  },
+                ),
+                const SizedBox(height: 4),
+              ],
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: const Text('Close'),
             ),
           ],
         );
@@ -638,36 +661,120 @@ class _ChatListScreenState extends State<ChatListScreen> {
   /// Shows the dialog to input a user ID
   void _showAddUserByIdDialog() {
     final TextEditingController controller = TextEditingController();
+    bool isValid = false;
+    String? errorText;
     
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Add user'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(
-              labelText: 'User ID',
-              hintText: 'Enter a user ID to add to chat',
-            ),
-            autofocus: true,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                final userId = controller.text.trim();
-                if (userId.isNotEmpty) {
-                  Navigator.of(context).pop();
-                  _addUserToChat(userId);
-                }
-              },
-              child: const Text('Add'),
-            ),
-          ],
+        final scheme = Theme.of(context).colorScheme;
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            void validate(String v) {
+              final val = v.trim();
+              setStateDialog(() {
+                isValid = val.length == 16;
+                errorText = (val.isEmpty || isValid) ? null : 'ID должен содержать 16 HEX символов';
+              });
+            }
+
+            return AlertDialog(
+              backgroundColor: scheme.surfaceVariant,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+              contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              title: const Text('Add user by ID', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    textInputAction: TextInputAction.done,
+                    textCapitalization: TextCapitalization.characters,
+                    maxLength: 16,
+                    style: const TextStyle(fontFamily: 'monospace'),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9a-fA-F]')),
+                    ],
+                    onChanged: validate,
+                    onSubmitted: (_) {
+                      final userId = controller.text.trim();
+                      if (userId.length == 16) {
+                        Navigator.of(context).pop();
+                        _addUserToChat(userId);
+                      } else {
+                        validate(userId);
+                      }
+                    },
+                    decoration: InputDecoration(
+                      labelText: 'User ID',
+                      hintText: '16-character HEX ID',
+                      errorText: errorText,
+                      filled: true,
+                      fillColor: scheme.surface,
+                      counterText: '',
+                      prefixIcon: Icon(Icons.fingerprint, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      suffixIcon: controller.text.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                controller.clear();
+                                validate('');
+                              },
+                            ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: scheme.outline.withOpacity(0.4)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        final data = await Clipboard.getData(Clipboard.kTextPlain);
+                        final text = (data?.text ?? '').trim();
+                        if (text.isNotEmpty) {
+                          controller.text = text;
+                          controller.selection = TextSelection.fromPosition(TextPosition(offset: controller.text.length));
+                          validate(text);
+                        }
+                      },
+                      icon: const Icon(Icons.paste),
+                      label: const Text('Paste from clipboard'),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  onPressed: isValid
+                      ? () {
+                          final userId = controller.text.trim();
+                          Navigator.of(context).pop();
+                          _addUserToChat(userId);
+                        }
+                      : null,
+                  icon: const Icon(Icons.person_add),
+                  label: const Text('Add'),
+                ),
+              ],
+            );
+          },
         );
       },
     );

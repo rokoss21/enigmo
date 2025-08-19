@@ -1,4 +1,4 @@
-// This is a basic Flutter widget test for Anongram app.
+// This is a basic Flutter widget test for Enigmo app.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,8 +13,8 @@ void main() {
     // Verify that the app loads without errors
     expect(find.byType(MaterialApp), findsOneWidget);
     
-    // Verify that the ChatListScreen is displayed
-    expect(find.text('Anongram'), findsOneWidget);
+    // Verify that the ChatListScreen is displayed with the new title
+    expect(find.text('Enigmo'), findsOneWidget);
     
     // Pump a few frames to let the UI settle, but don't wait for network
     await tester.pump();
@@ -26,7 +26,7 @@ void main() {
     
     final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
     
-    expect(materialApp.title, equals('Anongram'));
+    expect(materialApp.title, equals('Enigmo'));
     expect(materialApp.debugShowCheckedModeBanner, isFalse);
     expect(materialApp.theme, isNotNull);
   });

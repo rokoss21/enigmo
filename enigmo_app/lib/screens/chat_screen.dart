@@ -5,6 +5,7 @@ import '../models/chat.dart';
 import '../services/network_service.dart';
 import '../services/crypto_engine.dart';
 import '../services/key_manager.dart';
+import '../widgets/message_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
   final Chat chat;
@@ -209,12 +210,19 @@ class _ChatScreenState extends State<ChatScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircleAvatar(
-              backgroundColor: _otherOnline ? Colors.green : Colors.grey,
-              radius: 16,
-              child: Text(
-                widget.chat.name[0].toUpperCase(),
-                style: const TextStyle(color: Colors.white, fontSize: 14),
+            Container(
+              padding: const EdgeInsets.all(1),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.black, width: 1),
+              ),
+              child: CircleAvatar(
+                backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+                radius: 15,
+                child: Text(
+                  widget.chat.name[0].toUpperCase(),
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -232,7 +240,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     _otherOnline ? 'online' : 'offline',
                     style: TextStyle(
                       fontSize: 12,
-                      color: _otherOnline ? Colors.green : Colors.grey,
+                      color: _otherOnline ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -240,7 +248,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -268,7 +276,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         itemBuilder: (context, index) {
                           final message = _messages[index];
                           final isMe = message.senderId == _networkService.userId;
-                          return _buildMessageBubble(message, isMe);
+                          return MessageBubble(message: message, isMe: isMe);
                         },
                       ),
           ),
@@ -278,63 +286,14 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(Message message, bool isMe) {
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
-        decoration: BoxDecoration(
-          color: isMe ? Colors.blue : Colors.grey[300],
-          borderRadius: BorderRadius.circular(18),
-        ),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              message.content,
-              style: TextStyle(
-                color: isMe ? Colors.white : Colors.black,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                   _formatTime(message.timestamp),
-                   style: TextStyle(
-                     color: isMe ? Colors.white70 : Colors.black54,
-                     fontSize: 12,
-                   ),
-                 ),
-                 if (isMe) ...[
-                    const SizedBox(width: 4),
-                    Icon(
-                      message.status == MessageStatus.read ? Icons.done_all : Icons.done,
-                      color: message.status == MessageStatus.read ? Colors.lightBlue : Colors.white70,
-                      size: 16,
-                    ),
-                  ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildMessageInput() {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
         border: Border(
-          top: BorderSide(color: Colors.grey[300]!),
+          top: BorderSide(color: scheme.outline.withOpacity(0.4)),
         ),
       ),
       child: Row(
@@ -342,18 +301,8 @@ class _ChatScreenState extends State<ChatScreen> {
           Expanded(
             child: TextField(
               controller: _messageController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: 'Type a message...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(25),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: Colors.grey[100],
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
               ),
               maxLines: null,
               textCapitalization: TextCapitalization.sentences,
@@ -379,7 +328,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   },
                   icon: const Icon(Icons.send),
                   style: IconButton.styleFrom(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: scheme.surfaceVariant,
                     foregroundColor: Colors.white,
                     shape: const CircleBorder(),
                   ),
