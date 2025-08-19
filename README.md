@@ -132,26 +132,26 @@
 
 ```mermaid
 graph TD
-    subgraph Enigmo Flutter App (Client)
-        A[UI/UX Layer]
-        B[Services Layer]
-        C[Crypto Engine]
-        D[Secure Storage]
+    subgraph Client["📱 Enigmo Flutter App"]
+        A["🎨 UI/UX Layer"]
+        B["⚙️ Services Layer"]
+        C["🔐 Crypto Engine"]
+        D["💾 Secure Storage"]
     end
 
-    subgraph Enigmo Dart Server
-        E[WebSocket Handler]
-        F[User Manager]
-        G[Message Router]
-        H[REST API]
+    subgraph Server["🖥️ Enigmo Dart Server"]
+        E["🔌 WebSocket Handler"]
+        F["👥 User Manager"]
+        G["📨 Message Router"]
+        H["🌐 REST API"]
     end
 
     A --> B
     B --> C
     C --> D
 
-    B -- WebSocket (E2EE Payload) --> E
-    B -- REST (HTTPS) --> H
+    B -.->|"WebSocket (E2EE)"| E
+    B -.->|"REST (HTTPS)"| H
 
     E --> F
     E --> G
