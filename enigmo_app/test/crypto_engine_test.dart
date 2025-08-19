@@ -12,7 +12,7 @@ void main() {
     late SimplePublicKey testEncryptionPublicKey;
 
     setUpAll(() async {
-      // Создаем тестовые ключи
+      // Create test keys
       final ed25519 = Ed25519();
       final x25519 = X25519();
       
@@ -23,12 +23,12 @@ void main() {
       testEncryptionPublicKey = await testEncryptionKeyPair.extractPublicKey();
     });
 
-    group('Подпись данных', () {
-      test('должен успешно подписать данные', () async {
-        // Мокаем KeyManager для возврата тестового ключа
+    group('Data Signing', () {
+      test('should successfully sign data', () async {
+        // Mock KeyManager to return the test key (conceptually)
         final testData = 'test_data_to_sign';
         
-        // Создаем подпись напрямую для тестирования
+        // Create a signature directly for testing
         final ed25519 = Ed25519();
         final dataBytes = utf8.encode(testData);
         final signature = await ed25519.sign(dataBytes, keyPair: testSigningKeyPair);
@@ -38,16 +38,16 @@ void main() {
         expect(signatureString, isA<String>());
       });
 
-      test('должен успешно проверить валидную подпись', () async {
+      test('should successfully verify a valid signature', () async {
         final testData = 'test_data_for_verification';
         
-        // Создаем подпись
+        // Create a signature
         final ed25519 = Ed25519();
         final dataBytes = utf8.encode(testData);
         final signature = await ed25519.sign(dataBytes, keyPair: testSigningKeyPair);
         final signatureString = base64Encode(signature.bytes);
 
-        // Проверяем подпись
+        // Verify the signature
         final isValid = await CryptoEngine.verifySignature(
           testData,
           signatureString,
@@ -57,7 +57,7 @@ void main() {
         expect(isValid, isTrue);
       });
 
-      test('должен отклонить неверную подпись', () async {
+      test('should reject an invalid signature', () async {
         final testData = 'test_data';
         final invalidSignature = 'invalid_signature_string';
 
@@ -70,17 +70,17 @@ void main() {
         expect(isValid, isFalse);
       });
 
-      test('должен отклонить подпись для измененных данных', () async {
+      test('should reject a signature for modified data', () async {
         final originalData = 'original_data';
         final modifiedData = 'modified_data';
         
-        // Создаем подпись для оригинальных данных
+        // Create a signature for the original data
         final ed25519 = Ed25519();
         final dataBytes = utf8.encode(originalData);
         final signature = await ed25519.sign(dataBytes, keyPair: testSigningKeyPair);
         final signatureString = base64Encode(signature.bytes);
 
-        // Проверяем подпись с измененными данными
+        // Verify the signature against modified data
         final isValid = await CryptoEngine.verifySignature(
           modifiedData,
           signatureString,
@@ -91,11 +91,11 @@ void main() {
       });
     });
 
-    group('Шифрование сообщений', () {
-      test('должен успешно зашифровать и расшифровать сообщение', () async {
-        final originalMessage = 'Секретное сообщение для тестирования';
+    group('Message Encryption', () {
+      test('should successfully encrypt and decrypt a message', () async {
+        final originalMessage = 'Secret message for testing';
         
-        // Создаем второй набор ключей для получателя
+        // Create a second key pair for the recipient
         final x25519 = X25519();
         final ed25519 = Ed25519();
         
@@ -105,7 +105,7 @@ void main() {
         final recipientEncryptionPublicKey = await recipientEncryptionKeyPair.extractPublicKey();
         final recipientSigningPublicKey = await recipientSigningKeyPair.extractPublicKey();
 
-        // Шифруем сообщение (имитируем отправителя)
+        // Encrypt the message (simulate sender)
         final sharedSecret = await x25519.sharedSecretKey(
           keyPair: testEncryptionKeyPair,
           remotePublicKey: recipientEncryptionPublicKey,
@@ -118,7 +118,7 @@ void main() {
         final messageBytes = utf8.encode(originalMessage);
         final secretBox = await chacha20.encrypt(messageBytes, secretKey: secretKey);
         
-        // Создаем подпись
+        // Create a signature
         final signature = await ed25519.sign(secretBox.cipherText, keyPair: testSigningKeyPair);
         
         final encryptedMessage = EncryptedMessage(
@@ -128,7 +128,7 @@ void main() {
           signature: base64Encode(signature.bytes),
         );
 
-        // Расшифровываем сообщение (имитируем получателя)
+        // Decrypt the message (simulate recipient)
         final recipientSharedSecret = await x25519.sharedSecretKey(
           keyPair: recipientEncryptionKeyPair,
           remotePublicKey: testEncryptionPublicKey,
@@ -137,7 +137,7 @@ void main() {
         final recipientSharedSecretBytes = await recipientSharedSecret.extractBytes();
         final recipientSecretKey = SecretKey(recipientSharedSecretBytes);
         
-        // Проверяем подпись
+        // Verify the signature
         final encryptedData = base64Decode(encryptedMessage.encryptedData);
         final signatureObj = Signature(
           base64Decode(encryptedMessage.signature),
@@ -151,7 +151,7 @@ void main() {
         
         expect(isValidSignature, isTrue);
         
-        // Расшифровываем
+        // Decrypt
         final recipientSecretBox = SecretBox(
           encryptedData,
           nonce: base64Decode(encryptedMessage.nonce),
@@ -169,8 +169,8 @@ void main() {
       });
     });
 
-    group('Хеширование данных', () {
-      test('должен создать хеш данных', () async {
+    group('Data Hashing', () {
+      test('should create a data hash', () async {
         final testData = 'test_data_for_hashing';
         
         final hash = await CryptoEngine.hashData(testData);
@@ -178,12 +178,12 @@ void main() {
         expect(hash, isNotEmpty);
         expect(hash, isA<String>());
         
-        // Хеш должен быть детерминированным
+        // Hash should be deterministic
         final hash2 = await CryptoEngine.hashData(testData);
         expect(hash, equals(hash2));
       });
 
-      test('должен создать разные хеши для разных данных', () async {
+      test('should create different hashes for different data', () async {
         final data1 = 'first_data';
         final data2 = 'second_data';
         
@@ -193,23 +193,23 @@ void main() {
         expect(hash1, isNot(equals(hash2)));
       });
 
-      test('должен проверить целостность данных', () async {
+      test('should verify data integrity', () async {
         final testData = 'integrity_test_data';
         
         final hash = await CryptoEngine.hashData(testData);
         
-        // Проверяем с правильными данными
+        // Verify with correct data
         final isValid = await CryptoEngine.verifyDataIntegrity(testData, hash);
         expect(isValid, isTrue);
         
-        // Проверяем с измененными данными
+        // Verify with modified data
         final isInvalid = await CryptoEngine.verifyDataIntegrity('modified_data', hash);
         expect(isInvalid, isFalse);
       });
     });
 
-    group('Генерация nonce', () {
-      test('должен генерировать nonce заданной длины', () {
+    group('Nonce Generation', () {
+      test('should generate a nonce of a given length', () {
         final nonce12 = CryptoEngine.generateNonce(12);
         final nonce16 = CryptoEngine.generateNonce(16);
         final nonce24 = CryptoEngine.generateNonce(24);
@@ -219,21 +219,21 @@ void main() {
         expect(nonce24.length, equals(24));
       });
 
-      test('должен генерировать разные nonce', () {
+      test('should generate different nonces', () {
         final nonce1 = CryptoEngine.generateNonce();
         final nonce2 = CryptoEngine.generateNonce();
         
         expect(nonce1, isNot(equals(nonce2)));
       });
 
-      test('должен генерировать nonce по умолчанию длиной 12 байт', () {
+      test('should generate a default nonce of 12 bytes', () {
         final nonce = CryptoEngine.generateNonce();
         expect(nonce.length, equals(12));
       });
     });
 
     group('EncryptedMessage', () {
-      test('должен сериализовать и десериализовать EncryptedMessage', () {
+      test('should serialize and deserialize EncryptedMessage', () {
         final originalMessage = EncryptedMessage(
           encryptedData: 'encrypted_data_base64',
           nonce: 'nonce_base64',

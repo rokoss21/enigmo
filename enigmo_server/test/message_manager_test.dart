@@ -12,7 +12,7 @@ void main() {
       userManager = UserManager();
       messageManager = MessageManager(userManager);
 
-      // Регистрируем тестовых пользователей
+      // Register test users
       await userManager.registerUser(
         id: 'sender_123',
         publicSigningKey: 'sender_key',
@@ -28,11 +28,11 @@ void main() {
       );
     });
 
-    test('должен успешно отправить сообщение', () async {
+    test('should successfully send a message', () async {
       final message = await messageManager.sendMessage(
         senderId: 'sender_123',
         receiverId: 'receiver_456',
-        encryptedContent: 'Привет, как дела?',
+        encryptedContent: 'Hello, how are you?',
         signature: 'test_signature',
         type: MessageType.text,
       );
@@ -40,37 +40,37 @@ void main() {
       expect(message, isNotNull);
       expect(message.senderId, equals('sender_123'));
       expect(message.receiverId, equals('receiver_456'));
-      expect(message.encryptedContent, equals('Привет, как дела?'));
+      expect(message.encryptedContent, equals('Hello, how are you?'));
       expect(message.signature, equals('test_signature'));
       expect(message.type, equals(MessageType.text));
       expect(message.status, equals(DeliveryStatus.sent));
       expect(message.id, isNotEmpty);
     });
 
-    test('должен получить историю сообщений между пользователями', () async {
-      // Отправляем несколько сообщений
+    test('should get message history between users', () async {
+      // Send multiple messages
       await messageManager.sendMessage(
         senderId: 'sender_123',
         receiverId: 'receiver_456',
-        encryptedContent: 'Сообщение 1',
+        encryptedContent: 'Message 1',
         signature: 'sig1',
       );
 
       await messageManager.sendMessage(
         senderId: 'receiver_456',
         receiverId: 'sender_123',
-        encryptedContent: 'Сообщение 2',
+        encryptedContent: 'Message 2',
         signature: 'sig2',
       );
 
       await messageManager.sendMessage(
         senderId: 'sender_123',
         receiverId: 'receiver_456',
-        encryptedContent: 'Сообщение 3',
+        encryptedContent: 'Message 3',
         signature: 'sig3',
       );
 
-      // Получаем историю
+      // Get history
       final history = await messageManager.getMessageHistory(
         'sender_123',
         'receiver_456',
@@ -78,23 +78,23 @@ void main() {
       );
 
       expect(history.length, equals(3));
-      expect(history[0].encryptedContent, equals('Сообщение 1'));
-      expect(history[1].encryptedContent, equals('Сообщение 2'));
-      expect(history[2].encryptedContent, equals('Сообщение 3'));
+      expect(history[0].encryptedContent, equals('Message 1'));
+      expect(history[1].encryptedContent, equals('Message 2'));
+      expect(history[2].encryptedContent, equals('Message 3'));
     });
 
-    test('должен ограничить количество сообщений в истории', () async {
-      // Отправляем 5 сообщений
+    test('should limit the number of messages in history', () async {
+      // Send 5 messages
       for (int i = 1; i <= 5; i++) {
         await messageManager.sendMessage(
           senderId: 'sender_123',
           receiverId: 'receiver_456',
-          encryptedContent: 'Сообщение $i',
+          encryptedContent: 'Message $i',
           signature: 'sig$i',
         );
       }
 
-      // Получаем историю с лимитом 3
+      // Get history with a limit of 3
       final history = await messageManager.getMessageHistory(
         'sender_123',
         'receiver_456',
@@ -102,56 +102,56 @@ void main() {
       );
 
       expect(history.length, equals(3));
-      // Должны получить последние 3 сообщения
-      expect(history[0].encryptedContent, equals('Сообщение 3'));
-      expect(history[1].encryptedContent, equals('Сообщение 4'));
-      expect(history[2].encryptedContent, equals('Сообщение 5'));
+      // Should get the last 3 messages
+      expect(history[0].encryptedContent, equals('Message 3'));
+      expect(history[1].encryptedContent, equals('Message 4'));
+      expect(history[2].encryptedContent, equals('Message 5'));
     });
 
-    test('должен фильтровать историю по времени', () async {
-      // Отправляем первое сообщение
+    test('should filter history by time', () async {
+      // Send the first message
       await messageManager.sendMessage(
         senderId: 'sender_123',
         receiverId: 'receiver_456',
-        encryptedContent: 'Старое сообщение',
+        encryptedContent: 'Old message',
         signature: 'sig1',
       );
 
-      // Ждем немного и запоминаем время
+      // Wait a bit and remember the time
       await Future.delayed(const Duration(milliseconds: 100));
       final cutoffTime = DateTime.now();
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // Отправляем второе сообщение после cutoffTime
+      // Send the second message after cutoffTime
       await messageManager.sendMessage(
         senderId: 'sender_123',
         receiverId: 'receiver_456',
-        encryptedContent: 'Новое сообщение',
+        encryptedContent: 'New message',
         signature: 'sig2',
       );
 
-      // Получаем историю до cutoffTime
+      // Get history before cutoffTime
       final history = await messageManager.getMessageHistory(
         'sender_123',
         'receiver_456',
         before: cutoffTime,
       );
 
-      // Должно быть только одно сообщение (старое)
+      // There should be only one message (the old one)
       expect(history.length, equals(1));
-      expect(history[0].encryptedContent, equals('Старое сообщение'));
+      expect(history[0].encryptedContent, equals('Old message'));
     });
 
-    test('должен помечать сообщение как прочитанное', () async {
-      // Отправляем сообщение
+    test('should mark a message as read', () async {
+      // Send a message
       final message = await messageManager.sendMessage(
         senderId: 'sender_123',
         receiverId: 'receiver_456',
-        encryptedContent: 'Тестовое сообщение',
+        encryptedContent: 'Test message',
         signature: 'test_sig',
       );
 
-      // Помечаем как прочитанное
+      // Mark as read
       final success = await messageManager.markMessageAsRead(
         message.id,
         'receiver_456',
@@ -160,16 +160,16 @@ void main() {
       expect(success, isTrue);
     });
 
-    test('не должен позволить пометить сообщение как прочитанное не получателю', () async {
-      // Отправляем сообщение
+    test('should not allow marking as read by non-receiver', () async {
+      // Send a message
       final message = await messageManager.sendMessage(
         senderId: 'sender_123',
         receiverId: 'receiver_456',
-        encryptedContent: 'Тестовое сообщение',
+        encryptedContent: 'Test message',
         signature: 'test_sig',
       );
 
-      // Пытаемся пометить как прочитанное от имени отправителя
+      // Try to mark as read on behalf of the sender
       final success = await messageManager.markMessageAsRead(
         message.id,
         'sender_123',
@@ -178,41 +178,41 @@ void main() {
       expect(success, isFalse);
     });
 
-    test('должен получить сообщения пользователя', () async {
-      // Отправляем сообщения
+    test('should get user messages', () async {
+      // Send messages
       await messageManager.sendMessage(
         senderId: 'sender_123',
         receiverId: 'receiver_456',
-        encryptedContent: 'Исходящее сообщение',
+        encryptedContent: 'Outgoing message',
         signature: 'sig1',
       );
 
       await messageManager.sendMessage(
         senderId: 'receiver_456',
         receiverId: 'sender_123',
-        encryptedContent: 'Входящее сообщение',
+        encryptedContent: 'Incoming message',
         signature: 'sig2',
       );
 
-      // Получаем сообщения пользователя sender_123
+      // Get messages for user sender_123
       final userMessages = await messageManager.getUserMessages('sender_123');
 
       expect(userMessages.length, equals(2));
-      // Сообщения должны быть отсортированы по времени (новые первыми)
-      expect(userMessages[0].encryptedContent, equals('Входящее сообщение'));
-      expect(userMessages[1].encryptedContent, equals('Исходящее сообщение'));
+      // Messages should be sorted by time (newest first)
+      expect(userMessages[0].encryptedContent, equals('Incoming message'));
+      expect(userMessages[1].encryptedContent, equals('Outgoing message'));
     });
 
-    test('должен получить статистику сообщений', () async {
-      // Отправляем сообщение
+    test('should get message statistics', () async {
+      // Send a message
       final message = await messageManager.sendMessage(
         senderId: 'sender_123',
         receiverId: 'receiver_456',
-        encryptedContent: 'Статистическое сообщение',
+        encryptedContent: 'Statistical message',
         signature: 'stat_sig',
       );
 
-      // Помечаем как прочитанное
+      // Mark as read
       await messageManager.markMessageAsRead(message.id, 'receiver_456');
 
       final stats = messageManager.getMessageStats();
@@ -225,12 +225,12 @@ void main() {
       expect(stats['read'], greaterThanOrEqualTo(1));
     });
 
-    test('должен обрабатывать различные типы сообщений', () async {
-      // Тестируем разные типы сообщений
+    test('should handle different message types', () async {
+      // Test different message types
       final textMessage = await messageManager.sendMessage(
         senderId: 'sender_123',
         receiverId: 'receiver_456',
-        encryptedContent: 'Текстовое сообщение',
+        encryptedContent: 'Text message',
         signature: 'sig1',
         type: MessageType.text,
       );
@@ -256,7 +256,7 @@ void main() {
       expect(fileMessage.type, equals(MessageType.file));
     });
 
-    test('должен обрабатывать метаданные сообщений', () async {
+    test('should handle message metadata', () async {
       final metadata = {
         'fileName': 'document.pdf',
         'fileSize': 1024,

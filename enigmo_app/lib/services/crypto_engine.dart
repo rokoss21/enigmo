@@ -37,53 +37,53 @@ class CryptoEngine {
   static final _ed25519 = Ed25519();
   static final _x25519 = X25519();
   
-  /// Шифрует сообщение для получателя
+  /// Encrypts a message for the recipient
   static Future<EncryptedMessage> encryptMessage(
     String message,
     SimplePublicKey recipientEncryptionKey,
   ) async {
     try {
-      print('INFO CryptoEngine.encryptMessage: Начало шифрования сообщения');
+      print('INFO CryptoEngine.encryptMessage: Start encrypting message');
       
-      // Получаем наши ключи
+      // Get our keys
       final ourEncryptionKeyPair = await KeyManager.getEncryptionKeyPair();
       final ourSigningKeyPair = await KeyManager.getSigningKeyPair();
       
       if (ourEncryptionKeyPair == null || ourSigningKeyPair == null) {
-        throw Exception('Ключи пользователя не найдены');
+        throw Exception('User keys not found');
       }
       
-      print('INFO CryptoEngine.encryptMessage: Ключи получены');
+      print('INFO CryptoEngine.encryptMessage: Keys obtained');
       
-      // Выполняем ECDH для получения общего секрета
+      // Perform ECDH to derive a shared secret
       final sharedSecret = await _x25519.sharedSecretKey(
         keyPair: ourEncryptionKeyPair,
         remotePublicKey: recipientEncryptionKey,
       );
       
-      // Извлекаем байты общего секрета
+      // Extract bytes of the shared secret
       final sharedSecretBytes = await sharedSecret.extractBytes();
-      print('INFO CryptoEngine.encryptMessage: Общий секрет создан');
+      print('INFO CryptoEngine.encryptMessage: Shared secret derived');
       
-      // Создаем ключ для симметричного шифрования
+      // Create a key for symmetric encryption
       final secretKey = SecretKey(sharedSecretBytes);
       
-      // Шифруем сообщение
+      // Encrypt the message
       final messageBytes = utf8.encode(message);
       final secretBox = await _chacha20.encrypt(
         messageBytes,
         secretKey: secretKey,
       );
       
-      print('INFO CryptoEngine.encryptMessage: Сообщение зашифровано');
+      print('INFO CryptoEngine.encryptMessage: Message encrypted');
       
-      // Подписываем зашифрованные данные
+      // Sign the encrypted data
       final signature = await _ed25519.sign(
         secretBox.cipherText,
         keyPair: ourSigningKeyPair,
       );
       
-      print('INFO CryptoEngine.encryptMessage: Подпись создана');
+      print('INFO CryptoEngine.encryptMessage: Signature created');
       
       return EncryptedMessage(
         encryptedData: base64Encode(secretBox.cipherText),
@@ -92,35 +92,35 @@ class CryptoEngine {
         signature: base64Encode(signature.bytes),
       );
     } catch (e, stackTrace) {
-      print('ERROR CryptoEngine.encryptMessage: Ошибка шифрования сообщения: $e');
+      print('ERROR CryptoEngine.encryptMessage: Error encrypting message: $e');
       print('STACK: $stackTrace');
-      throw Exception('Ошибка шифрования сообщения: $e');
+      throw Exception('Message encryption error: $e');
     }
   }
   
-  /// Расшифровывает сообщение от отправителя
+  /// Decrypts a message from the sender
   static Future<String> decryptMessage(
     EncryptedMessage encryptedMessage,
     SimplePublicKey senderEncryptionKey,
     SimplePublicKey senderSigningKey,
   ) async {
     try {
-      // Получаем наш ключ для расшифровки
+      // Get our key for decryption
       final ourEncryptionKeyPair = await KeyManager.getEncryptionKeyPair();
       
-      // Выполняем ECDH для получения общего секрета
+      // Perform ECDH to derive a shared secret
       final sharedSecret = await _x25519.sharedSecretKey(
         keyPair: ourEncryptionKeyPair,
         remotePublicKey: senderEncryptionKey,
       );
       
-      // Извлекаем байты общего секрета
+      // Extract bytes of the shared secret
       final sharedSecretBytes = await sharedSecret.extractBytes();
       
-      // Создаем ключ для симметричного расшифровки
+      // Create a key for symmetric decryption
       final secretKey = SecretKey(sharedSecretBytes);
       
-      // Проверяем подпись
+      // Verify signature
       final encryptedData = base64Decode(encryptedMessage.encryptedData);
       final signature = Signature(
         base64Decode(encryptedMessage.signature),
@@ -133,10 +133,10 @@ class CryptoEngine {
       );
       
       if (!isValidSignature) {
-        throw Exception('Неверная подпись сообщения');
+        throw Exception('Invalid message signature');
       }
       
-      // Расшифровываем сообщение
+      // Decrypt the message
       final secretBox = SecretBox(
         encryptedData,
         nonce: base64Decode(encryptedMessage.nonce),
@@ -152,22 +152,22 @@ class CryptoEngine {
       
       return utf8.decode(decryptedBytes);
     } catch (e) {
-      throw Exception('Ошибка расшифровки сообщения: $e');
+      throw Exception('Message decryption error: $e');
     }
   }
   
-  /// Подписывает данные нашим приватным ключом
+  /// Signs data with our private key
   static Future<String> signData(String data) async {
     try {
-      print('INFO CryptoEngine.signData: Подписание данных');
+      print('INFO CryptoEngine.signData: Signing data');
       
       final signingKeyPair = await KeyManager.getSigningKeyPair();
       if (signingKeyPair == null) {
-        throw Exception('Ключ подписи не найден');
+        throw Exception('Signing key not found');
       }
       
       final dataBytes = utf8.encode(data);
-      print('INFO CryptoEngine.signData: Данные для подписи подготовлены (${dataBytes.length} байт)');
+      print('INFO CryptoEngine.signData: Data prepared for signing (${dataBytes.length} bytes)');
       
       final signature = await _ed25519.sign(
         dataBytes,
@@ -175,29 +175,29 @@ class CryptoEngine {
       );
       
       final signatureString = base64Encode(signature.bytes);
-      print('INFO CryptoEngine.signData: Подпись создана успешно');
+      print('INFO CryptoEngine.signData: Signature created successfully');
       
       return signatureString;
     } catch (e, stackTrace) {
-      print('ERROR CryptoEngine.signData: Ошибка подписи данных: $e');
+      print('ERROR CryptoEngine.signData: Error signing data: $e');
       print('STACK: $stackTrace');
-      throw Exception('Ошибка подписи данных: $e');
+      throw Exception('Data signing error: $e');
     }
   }
   
-  /// Проверяет подпись данных
+  /// Verifies the data signature
   static Future<bool> verifySignature(
     String data,
     String signatureString,
     SimplePublicKey signingPublicKey,
   ) async {
     try {
-      print('INFO CryptoEngine.verifySignature: Проверка подписи');
+      print('INFO CryptoEngine.verifySignature: Verifying signature');
       
       final dataBytes = utf8.encode(data);
       final signatureBytes = base64Decode(signatureString);
       
-      print('INFO CryptoEngine.verifySignature: Данные подготовлены (${dataBytes.length} байт данных, ${signatureBytes.length} байт подписи)');
+      print('INFO CryptoEngine.verifySignature: Data prepared (${dataBytes.length} bytes of data, ${signatureBytes.length} bytes of signature)');
       
       final signature = Signature(
         signatureBytes,
@@ -209,23 +209,23 @@ class CryptoEngine {
         signature: signature,
       );
       
-      print('INFO CryptoEngine.verifySignature: Результат проверки подписи: ${isValid ? "валидна" : "невалидна"}');
+      print('INFO CryptoEngine.verifySignature: Verification result: ${isValid ? "valid" : "invalid"}');
       
       return isValid;
     } catch (e, stackTrace) {
-      print('ERROR CryptoEngine.verifySignature: Ошибка проверки подписи: $e');
+      print('ERROR CryptoEngine.verifySignature: Error verifying signature: $e');
       print('STACK: $stackTrace');
       return false;
     }
   }
   
-  /// Генерирует случайный nonce для дополнительной безопасности
+  /// Generates a random nonce for additional security
   static List<int> generateNonce([int length = 12]) {
     final random = Random.secure();
     return List.generate(length, (_) => random.nextInt(256));
   }
   
-  /// Хеширует данные с помощью SHA-256
+  /// Hashes data using SHA-256
   static Future<String> hashData(String data) async {
     final sha256Hash = Sha256();
     final dataBytes = utf8.encode(data);
@@ -233,7 +233,7 @@ class CryptoEngine {
     return base64Encode(hash.bytes);
   }
   
-  /// Проверяет целостность данных по хешу
+  /// Verifies data integrity by comparing hashes
   static Future<bool> verifyDataIntegrity(String data, String expectedHash) async {
     final actualHash = await hashData(data);
     return actualHash == expectedHash;

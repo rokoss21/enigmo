@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-/// Типы сообщений
+/// Message types
 enum MessageType {
   text,
   image,
@@ -10,7 +10,7 @@ enum MessageType {
   system,
 }
 
-/// Статус доставки сообщения
+/// Message delivery status
 enum DeliveryStatus {
   pending,
   sent,
@@ -19,7 +19,7 @@ enum DeliveryStatus {
   failed,
 }
 
-/// Модель сообщения на сервере
+/// Server-side message model
 class ServerMessage {
   final String id;
   final String senderId;
@@ -43,7 +43,7 @@ class ServerMessage {
     this.metadata,
   });
 
-  /// Создает сообщение из JSON
+  /// Creates a message from JSON
   factory ServerMessage.fromJson(Map<String, dynamic> json) {
     return ServerMessage(
       id: json['id'] as String,
@@ -64,7 +64,7 @@ class ServerMessage {
     );
   }
 
-  /// Конвертирует сообщение в JSON
+  /// Converts the message to JSON
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -79,7 +79,7 @@ class ServerMessage {
     };
   }
 
-  /// Создает копию сообщения с обновленным статусом
+  /// Creates a copy of the message with updated fields
   ServerMessage copyWith({
     String? id,
     String? senderId,

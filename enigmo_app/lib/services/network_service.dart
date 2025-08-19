@@ -8,7 +8,7 @@ import '../models/chat.dart';
 import 'key_manager.dart';
 import 'crypto_engine.dart';
 
-/// Сервис для работы с сетью и Bootstrap сервером
+/// Service for working with the network and the Bootstrap server
 class NetworkService {
   static final NetworkService _instance = NetworkService._internal();
 
@@ -16,7 +16,7 @@ class NetworkService {
     return _instance;
   }
 
-  // Внутренний помощник отправки на сервер (без дублирования локального сообщения при флаше очереди)
+  // Internal helper to send to server (without duplicating local message when flushing the queue)
   Future<bool> _sendToServer(String receiverId, String content, MessageType type, {required DateTime timestamp, bool emitLocal = false}) async {
     try {
       String encryptedContent = content;
@@ -42,7 +42,7 @@ class NetworkService {
         'timestamp': timestamp.toIso8601String(),
       };
 
-      print('DEBUG _sendToServer: Отправка сообщения: $wire');
+      print('DEBUG _sendToServer: Sending message: $wire');
 
       if (emitLocal) {
         try {
@@ -59,25 +59,25 @@ class NetworkService {
           _storeInMemory(localMsg);
           _newMessageController.add(localMsg);
         } catch (e) {
-          print('DEBUG _sendToServer: не удалось создать локальное сообщение: $e');
+          print('DEBUG _sendToServer: failed to create local message: $e');
         }
       }
 
       _channel!.sink.add(jsonEncode(wire));
       return true;
     } catch (e) {
-      print('DEBUG _sendToServer: Ошибка при отправке: $e');
+      print('DEBUG _sendToServer: Error while sending: $e');
       return false;
     }
   }
 
-  // Гарантирует, что у нас есть публичные ключи получателя в кеше
+  // Ensures we have recipient public keys in cache
   Future<bool> _ensureRecipientKeys(String userId) async {
     if (_publicEncKeys.containsKey(userId) && _publicSignKeys.containsKey(userId)) {
       return true;
     }
     try {
-      // Запрашиваем список пользователей и ждём ответ
+      // Request the users list and wait for response
       await getUsers();
       final response = await _waitForResponse('users_list');
       if (response != null) {
@@ -93,13 +93,13 @@ class NetworkService {
   static const String _defaultServerUrl = 'ws://localhost:8080/ws';
   
   WebSocketChannel? _channel;
-  // Единый broadcast-поток для всех подписчиков
+  // Single broadcast stream for all subscribers
   Stream<dynamic>? _broadcastStream;
   StreamController<Map<String, dynamic>>? _messageController;
   String? _userId;
   bool _isConnected = false;
   
-  // Heartbeat и авто-переподключение
+  // Heartbeat and auto-reconnect
   Timer? _heartbeatTimer;
   Timer? _reconnectTimer;
   DateTime? _lastPongAt;
@@ -109,11 +109,11 @@ class NetworkService {
   bool _isReconnecting = false;
   int _reconnectAttempt = 0;
   final int _maxReconnectDelaySeconds = 30;
-  bool _ephemeralInitDone = false; // выполняем очистку ключей один раз за запуск
+  bool _ephemeralInitDone = false; // perform key cleanup once per app launch
   
-  // KeyManager и CryptoEngine используются как статические классы
+  // KeyManager and CryptoEngine are used as static classes
   
-  // Стримы для различных типов сообщений
+  // Streams for various message types
   final StreamController<Message> _newMessageController = StreamController.broadcast();
   final StreamController<List<Message>> _messageHistoryController = StreamController.broadcast();
   final StreamController<List<Chat>> _chatsController = StreamController.broadcast();
@@ -121,16 +121,16 @@ class NetworkService {
   final StreamController<String> _newChatController = StreamController.broadcast();
   final StreamController<List<Map<String, dynamic>>> _usersController = StreamController.broadcast();
   final StreamController<Map<String, dynamic>> _userStatusController = StreamController.broadcast();
-  // Кеш публичных ключей пользователей
+  // Cache of users' public keys
   final Map<String, String> _publicEncKeys = {}; // userId -> base64 X25519
   final Map<String, String> _publicSignKeys = {}; // userId -> base64 Ed25519
-  // Отслеживание онлайна и локальная очередь сообщений для эфемерного режима
+  // Online tracking and local message queue for ephemeral mode
   final Set<String> _onlineUsers = <String>{};
   final Map<String, List<_PendingMessage>> _pendingByReceiver = {};
-  // Локальный буфер сообщений по собеседнику (только на время сессии)
+  // Local in-memory messages per peer (session-lifetime only)
   final Map<String, List<Message>> _inMemoryByPeer = {};
 
-  // Локальная структура для отложенных сообщений
+  // Local structure for deferred messages
   // ignore: unused_element
   static _PendingMessage _pm(String receiverId, String content, MessageType type, DateTime timestamp) =>
       _PendingMessage(receiverId: receiverId, content: content, type: type, timestamp: timestamp);
@@ -146,30 +146,30 @@ class NetworkService {
   bool get isConnected => _isConnected;
   String? get userId => _userId;
 
-  // Возвращает копию последних сообщений с конкретным собеседником
+  // Returns a copy of the latest messages with a specific peer
   List<Message> getRecentMessages(String otherUserId) {
     final list = _inMemoryByPeer[otherUserId];
     if (list == null) return const [];
     return List<Message>.from(list);
   }
 
-  // Очищает все локальные данные по собеседнику (сообщения/очередь/онлайн-флаг)
+  // Clears all local data for a peer (messages/queue/online-flag)
   void clearPeerSession(String otherUserId) {
     try {
       _inMemoryByPeer.remove(otherUserId);
       _pendingByReceiver.remove(otherUserId);
       _onlineUsers.remove(otherUserId);
-      print('DEBUG NetworkService.clearPeerSession: очищены данные для $otherUserId');
+      print('DEBUG NetworkService.clearPeerSession: cleared data for $otherUserId');
     } catch (e) {
-      print('DEBUG NetworkService.clearPeerSession: ошибка: $e');
+      print('DEBUG NetworkService.clearPeerSession: error: $e');
     }
   }
 
-  // Полный сброс текущей сессии: удаление ключей/ID, очистка локальных кешей и переподключение
+  // Full reset of the current session: delete keys/ID, clear local caches and reconnect
   Future<bool> resetSession() async {
     try {
-      print('DEBUG NetworkService.resetSession: старт');
-      // Отключаемся и очищаем локальные структуры
+      print('DEBUG NetworkService.resetSession: start');
+      // Disconnect and clear local structures
       disconnect();
       _inMemoryByPeer.clear();
       _pendingByReceiver.clear();
@@ -177,12 +177,12 @@ class NetworkService {
       _publicEncKeys.clear();
       _publicSignKeys.clear();
       _userId = null;
-      // Удаляем ключи и userId в хранилище
+      // Delete keys and userId in storage
       await KeyManager.deleteUserKeys();
-      // Разрешаем connect() снова выполнить эпемерную очистку на всякий случай
+      // Allow connect() to perform ephemeral cleanup again just in case
       _ephemeralInitDone = false;
 
-      // Новое подключение и регистрация/аутентификация
+      // New connection and registration/authentication
       final connected = await connect();
       if (!connected) return false;
       final registeredId = await registerUser();
@@ -190,12 +190,12 @@ class NetworkService {
       final authed = await authenticate();
       return authed;
     } catch (e) {
-      print('DEBUG NetworkService.resetSession: ошибка: $e');
+      print('DEBUG NetworkService.resetSession: error: $e');
       return false;
     }
   }
 
-  // Кладёт ключи пользователей в локальный кеш
+  // Puts users' keys into local cache
   void _cacheUsersKeys(List<Map<String, dynamic>> users) {
     try {
       for (final u in users) {
@@ -210,7 +210,7 @@ class NetworkService {
           _publicSignKeys[id] = sign;
         }
 
-        // Также обновляем локальный набор онлайна по users_list
+        // Also update local online set based on users_list
         bool isOnline = false;
         final onlineRaw = u['isOnline'];
         if (onlineRaw is bool) {
@@ -225,10 +225,10 @@ class NetworkService {
         if (id != _userId) {
           if (isOnline) {
             if (_onlineUsers.add(id)) {
-              // Если пользователь только что помечен как онлайн — флашим отложенные
+              // If a user just became online — flush deferred messages
               final pending = _pendingByReceiver.remove(id);
               if (pending != null && pending.isNotEmpty) {
-                print('DEBUG _cacheUsersKeys: Флаш отложенных сообщений для $id: ${pending.length}');
+                print('DEBUG _cacheUsersKeys: Flushing deferred messages for $id: ${pending.length}');
                 () async {
                   for (final p in pending) {
                     try { await _sendToServer(p.receiverId, p.content, p.type, timestamp: p.timestamp, emitLocal: false); } catch (_) {}
@@ -241,15 +241,15 @@ class NetworkService {
           }
         }
       }
-      print('DEBUG _cacheUsersKeys: закешировано encKeys=${_publicEncKeys.length}, signKeys=${_publicSignKeys.length}');
+      print('DEBUG _cacheUsersKeys: cached encKeys=${_publicEncKeys.length}, signKeys=${_publicSignKeys.length}');
     } catch (e) {
-      print('DEBUG _cacheUsersKeys: ошибка кеширования ключей: $e');
+      print('DEBUG _cacheUsersKeys: key caching error: $e');
     }
   }
 
   String _resolveServerUrl() {
     if (kIsWeb) {
-      // На вебе используем хост страницы. Если это 0.0.0.0 или пусто, подставляем localhost
+      // On web use the page host. If it's 0.0.0.0 or empty, use localhost
       var host = Uri.base.host;
       if (host.isEmpty || host == '0.0.0.0') {
         host = 'localhost';
@@ -257,56 +257,56 @@ class NetworkService {
       final scheme = Uri.base.scheme == 'https' ? 'wss' : 'ws';
       return '$scheme://$host:8080/ws';
     } else {
-      // На мобильных/desktop оставляем localhost по умолчанию
+      // On mobile/desktop keep localhost by default
       return _defaultServerUrl;
     }
   }
 
-  /// Подключается к Bootstrap серверу
+  /// Connect to Bootstrap server
   Future<bool> connect({String? serverUrl, bool ephemeralIdentity = true}) async {
     try {
-      // Эфемерный режим: при первом подключении очищаем ключи/ID, чтобы каждый запуск был новым пользователем
+      // Ephemeral mode: on first connect, clear keys/ID so each launch is a new user
       if (ephemeralIdentity && !_ephemeralInitDone) {
         try {
-          print('DEBUG NetworkService.connect: Эфемерный режим — очистка ключей/ID на старте приложения');
+          print('DEBUG NetworkService.connect: Ephemeral mode — clearing keys/ID on app start');
           await KeyManager.deleteUserKeys();
         } catch (e) {
-          print('DEBUG NetworkService.connect: Ошибка очистки ключей: $e');
+          print('DEBUG NetworkService.connect: Error clearing keys: $e');
         } finally {
           _ephemeralInitDone = true;
         }
       }
       final url = serverUrl ?? _resolveServerUrl();
-      print('Подключение к серверу: $url');
+      print('Connecting to server: $url');
       
-      _manualDisconnect = false; // Явное подключение отменяет флаг ручного отключения
+      _manualDisconnect = false; // Explicit connect cancels manual disconnect flag
       _channel = WebSocketChannel.connect(Uri.parse(url));
       _messageController = StreamController<Map<String, dynamic>>.broadcast();
 
-      // Создаем и сохраняем broadcast stream, чтобы все подписки использовали один и тот же поток
+      // Create and store a broadcast stream so all subscriptions share the same stream
       _broadcastStream = _channel!.stream.asBroadcastStream();
 
-      // Слушаем входящие сообщения основным обработчиком
+      // Listen to incoming messages with the main handler
       _broadcastStream!.listen(
         (data) {
-          print('DEBUG: Получено сообщение от сервера: $data');
+          print('DEBUG: Received message from server: $data');
           try {
             _handleServerMessage(data as String);
           } catch (e) {
-            print('Ошибка обработки входящего сообщения: $e');
+            print('Error handling incoming message: $e');
           }
         },
         onError: (error) {
-          print('DEBUG: WebSocket ошибка: $error');
-          // Не вызываем отключение сразу, даем время на восстановление
-          print('WebSocket ошибка, но соединение может быть восстановлено');
+          print('DEBUG: WebSocket error: $error');
+          // Do not disconnect immediately; allow time for recovery
+          print('WebSocket error, but the connection may recover');
         },
         onDone: () {
-          print('DEBUG: WebSocket соединение закрыто сервером');
+          print('DEBUG: WebSocket connection closed by server');
           _handleDisconnection();
           _scheduleReconnect();
         },
-        cancelOnError: false, // Не закрываем стрим при ошибках
+        cancelOnError: false, // Do not close the stream on errors
       );
       
       _isConnected = true;
@@ -314,10 +314,10 @@ class NetworkService {
       _reconnectAttempt = 0;
       _isReconnecting = false;
       _startHeartbeat();
-      print('Подключение к серверу успешно');
+      print('Connected to server successfully');
       return true;
     } catch (e) {
-      print('Ошибка подключения к серверу: $e');
+      print('Error connecting to server: $e');
       _isConnected = false;
       _connectionController.add(false);
       _scheduleReconnect();
@@ -325,19 +325,19 @@ class NetworkService {
     }
   }
 
-  /// Регистрирует нового пользователя
+  /// Register a new user
   Future<String?> registerUser({String? nickname}) async {
     if (!_isConnected || _channel == null) {
-      throw Exception('Нет подключения к серверу');
+      throw Exception('No connection to server');
     }
 
     try {
-      // Генерируем ключи если их нет
+      // Generate keys if they do not exist
       await KeyManager.generateUserKeys();
       final keys = await KeyManager.loadUserKeys();
       
       if (keys == null) {
-        throw Exception('Не удалось загрузить ключи');
+        throw Exception('Failed to load keys');
       }
 
       final signingPublicKey = await keys.signingKeyPair.extractPublicKey();
@@ -353,41 +353,41 @@ class NetworkService {
 
       _sendMessage(message);
       
-      // Ждем ответ от сервера
+      // Wait for server response
       final response = await _waitForResponse('register_success');
       if (response != null) {
         _userId = response['userId'] as String?;
         if (_userId != null) {
-          // Сохраняем userId из ответа сервера в KeyManager
+          // Save userId from server response in KeyManager
           await KeyManager.setUserId(_userId!);
-          print('userId сохранен в KeyManager: $_userId');
+          print('userId saved in KeyManager: $_userId');
         }
-        print('Пользователь зарегистрирован: $_userId');
+        print('User registered: $_userId');
         return _userId;
       }
       
       return null;
     } catch (e) {
-      print('Ошибка регистрации: $e');
+      print('Registration error: $e');
       return null;
     }
   }
 
-  /// Аутентифицирует пользователя
+  /// Authenticate the user
   Future<bool> authenticate() async {
     if (!_isConnected || _channel == null) {
-      throw Exception('Нет подключения к серверу');
+      throw Exception('No connection to server');
     }
 
     try {
       var storedUserId = await KeyManager.getUserId();
-      print('Попытка аутентификации с userId: $storedUserId');
+      print('Attempting authentication with userId: $storedUserId');
       if (storedUserId == null) {
-        // Авто-регистрация при отсутствии userId (после очистки для эфемерного режима)
-        print('ID пользователя не найден — выполняем авто-регистрацию');
+        // Auto-register if userId is missing (after cleanup for ephemeral mode)
+        print('User ID not found — performing auto-registration');
         storedUserId = await registerUser();
         if (storedUserId == null) {
-          print('Авто-регистрация не удалась');
+          print('Auto-registration failed');
           return false;
         }
       }
@@ -395,7 +395,7 @@ class NetworkService {
 
       final keys = await KeyManager.loadUserKeys();
       if (keys == null) {
-        print('Ключи пользователя не найдены');
+        print('User keys not found');
         return false;
       }
 
@@ -411,31 +411,31 @@ class NetworkService {
 
       _sendMessage(message);
       
-      // Ждем ответ от сервера
+      // Wait for server response
       final response = await _waitForResponse('auth_success');
       if (response != null && response['success'] == true) {
-        print('Аутентификация успешна');
-        // _userId уже установлен выше, сохраняем состояние аутентификации
-        print('После успешной аутентификации: _isConnected=$_isConnected, _userId=$_userId');
+        print('Authentication successful');
+        // _userId already set above, keep auth state
+        print('After successful authentication: _isConnected=$_isConnected, _userId=$_userId');
         return true;
       } else {
-        // Если аутентификация не удалась, сбрасываем _userId
+        // If authentication failed, reset _userId
         _userId = null;
       }
       
       return false;
     } catch (e) {
-      print('Ошибка аутентификации: $e');
+      print('Authentication error: $e');
       return false;
     }
   }
 
-  /// Отправляет сообщение
+  /// Send a message
   Future<bool> sendMessage(String receiverId, String content, {MessageType type = MessageType.text}) async {
     print('DEBUG NetworkService.sendMessage: receiverId=$receiverId, content="$content", type=$type');
     
     if (!_isConnected || _userId == null) {
-      print('DEBUG NetworkService.sendMessage: Не подключен или нет userId');
+      print('DEBUG NetworkService.sendMessage: Not connected or missing userId');
       return false;
     }
 
@@ -443,7 +443,7 @@ class NetworkService {
       final nowTs = DateTime.now();
       final isReceiverOnline = _onlineUsers.contains(receiverId);
 
-      // Всегда показываем локально как отправленное/в очереди
+      // Always show locally as sent/queued
       try {
         final localMsg = Message(
           id: 'local-${nowTs.millisecondsSinceEpoch}',
@@ -458,20 +458,20 @@ class NetworkService {
         _storeInMemory(localMsg);
         _newMessageController.add(localMsg);
       } catch (e) {
-        print('DEBUG NetworkService.sendMessage: не удалось создать локальное сообщение: $e');
+        print('DEBUG NetworkService.sendMessage: failed to create local message: $e');
       }
 
       if (!isReceiverOnline) {
-        print('DEBUG NetworkService.sendMessage: Получатель оффлайн — кладём в локальную очередь');
+        print('DEBUG NetworkService.sendMessage: Receiver offline — queuing locally');
         final list = _pendingByReceiver.putIfAbsent(receiverId, () => []);
         list.add(_pm(receiverId, content, type, nowTs));
         return true; // queued locally
       }
 
-      // Получатель онлайн — отправляем немедленно на сервер
+      // Receiver is online — send immediately to the server
       return await _sendToServer(receiverId, content, type, timestamp: nowTs, emitLocal: false);
     } catch (e) {
-      print('DEBUG NetworkService.sendMessage: Ошибка при отправке: $e');
+      print('DEBUG NetworkService.sendMessage: Error while sending: $e');
       return false;
     }
   }
@@ -489,9 +489,9 @@ class NetworkService {
       };
 
       _channel!.sink.add(jsonEncode(request));
-      print('DEBUG NetworkService.getMessageHistory: Отправлен запрос истории сообщений');
+      print('DEBUG NetworkService.getMessageHistory: Sent message history request');
       
-      // Ждем ответ от сервера - исправляем тип ответа
+      // Wait for server response - fixed response type
       final response = await _waitForResponse('message_history');
       if (response != null && response['messages'] != null) {
         final messagesData = (response['messages'] as List).cast<dynamic>();
@@ -506,17 +506,17 @@ class NetworkService {
             }
             messages.add(Message.fromJson(msgJson));
           } catch (e) {
-            print('DEBUG getMessageHistory: ошибка обработки сообщения истории: $e');
+            print('DEBUG getMessageHistory: error processing a history message: $e');
           }
         }
-        print('DEBUG NetworkService.getMessageHistory: Получено ${messages.length} сообщений');
+        print('DEBUG NetworkService.getMessageHistory: Received ${messages.length} messages');
         return messages;
       }
       
-      print('DEBUG NetworkService.getMessageHistory: Пустой ответ или ошибка');
+      print('DEBUG NetworkService.getMessageHistory: Empty response or error');
       return [];
     } catch (e) {
-      print('DEBUG NetworkService.getMessageHistory: Ошибка: $e');
+      print('DEBUG NetworkService.getMessageHistory: Error: $e');
       return [];
     }
   }
@@ -532,7 +532,7 @@ class NetworkService {
 
       _channel!.sink.add(jsonEncode(request));
     } catch (e) {
-      print('Ошибка отметки прочитанным: $e');
+      print('Error marking as read: $e');
     }
   }
 
@@ -546,22 +546,22 @@ class NetworkService {
 
       _channel!.sink.add(jsonEncode(request));
     } catch (e) {
-      print('Ошибка получения списка пользователей: $e');
+      print('Error getting users list: $e');
     }
   }
 
   void _listenToMessages() {
     _channel!.stream.listen(
       (data) {
-        print('DEBUG NetworkService._listenToMessages: Получены данные: $data');
+        print('DEBUG NetworkService._listenToMessages: Data received: $data');
         _handleServerMessage(data);
       },
       onError: (error) {
-        print('Ошибка WebSocket: $error');
+        print('WebSocket error: $error');
         _handleDisconnection();
       },
       onDone: () {
-        print('WebSocket соединение закрыто');
+        print('WebSocket connection closed');
         _handleDisconnection();
       },
     );
@@ -570,63 +570,63 @@ class NetworkService {
   void _handleServerMessage(String data) {
     try {
       final jsonData = jsonDecode(data);
-      print('DEBUG NetworkService._handleServerMessage: Разобранный JSON: $jsonData');
+      print('DEBUG NetworkService._handleServerMessage: Parsed JSON: $jsonData');
       
       final type = jsonData['type'];
       
       switch (type) {
         case 'new_message':
-          print('DEBUG NetworkService: Получено new_message');
+          print('DEBUG NetworkService: Received new_message');
           // Server sends { type: 'new_message', message: {...} }
           final payload = (jsonData['message'] as Map<String, dynamic>?) ?? (jsonData['data'] as Map<String, dynamic>?) ?? jsonData;
           _handleNewMessageAsync(payload);
           break;
         case 'offline_message':
-          // Эфемерный режим: игнорируем офлайн-доставку
-          print('DEBUG NetworkService: offline_message игнорируется (эфемерный режим)');
+          // Ephemeral mode: ignore offline delivery
+          print('DEBUG NetworkService: offline_message ignored (ephemeral mode)');
           break;
         case 'message':
-          // Эфемерный режим: игнорируем offline delivery
-          print('DEBUG NetworkService: message (offline delivery) игнорируется (эфемерный режим)');
+          // Ephemeral mode: ignore offline delivery
+          print('DEBUG NetworkService: message (offline delivery) ignored (ephemeral mode)');
           break;
         case 'message_sent':
-          print('DEBUG NetworkService: Получено message_sent');
-          // Добавляем собственное отправленное сообщение в поток, чтобы оно отобразилось в UI
+          print('DEBUG NetworkService: Received message_sent');
+          // Add our own sent message to the stream so it appears in the UI
           try {
             final payload = (jsonData['message'] as Map<String, dynamic>?)
                 ?? (jsonData['data'] as Map<String, dynamic>?)
                 ?? jsonData;
-            // Если это подтверждение для НАШЕГО сообщения, пропускаем, чтобы не показывать зашифрованный JSON
+            // If this is an ack for OUR message, skip to avoid showing encrypted JSON
             final senderId = payload['senderId'] as String?;
             if (senderId != null && senderId == _userId) {
-              print('DEBUG NetworkService: message_sent от нас самих — пропускаем отображение');
+              print('DEBUG NetworkService: message_sent from ourselves — skipping display');
               break;
             }
             _handleNewMessageAsync(payload);
           } catch (e) {
-            print('DEBUG NetworkService: Ошибка обработки message_sent: $e');
+            print('DEBUG NetworkService: Error handling message_sent: $e');
           }
           break;
         case 'message_read':
-          print('DEBUG NetworkService: Получено message_read');
+          print('DEBUG NetworkService: Received message_read');
           break;
         case 'chat_added':
-          print('DEBUG NetworkService: Получено chat_added');
+          print('DEBUG NetworkService: Received chat_added');
           final userId = jsonData['user_id'] as String?;
           final nickname = jsonData['nickname'] as String?;
           if (userId != null) {
             _newChatController.add(userId);
-            print('DEBUG NetworkService: Отправлено уведомление о новом чате для $userId');
+            print('DEBUG NetworkService: Sent a new chat notification for $userId');
           }
           break;
         case 'add_to_chat_success':
-          print('DEBUG NetworkService: Получено add_to_chat_success');
+          print('DEBUG NetworkService: Received add_to_chat_success');
           break;
         case 'users_list':
-          print('DEBUG NetworkService: Получено users_list');
+          print('DEBUG NetworkService: Received users_list');
           final users = (jsonData['users'] as List?)?.cast<Map<String, dynamic>>() ?? [];
           _cacheUsersKeys(users);
-          // Обновляем локальный список онлайн-пользователей
+          // Update local list of online users
           _onlineUsers.clear();
           for (final u in users) {
             final id = (u['userId'] ?? u['id']) as String?;
@@ -644,69 +644,69 @@ class NetworkService {
               isOnline = false;
             }
             if (isOnline) _onlineUsers.add(id);
-            // Пушим статус, чтобы UI сразу обновился
+            // Push status so UI updates immediately
             _userStatusController.add({'userId': id, 'isOnline': isOnline});
           }
           _usersController.add(users);
           break;
         case 'user_status_update':
-          print('DEBUG NetworkService: Получено user_status_update');
+          print('DEBUG NetworkService: Received user_status_update');
           _handleUserStatusUpdate(jsonData);
           break;
         case 'pong':
           break;
         case 'error':
-          print('Ошибка сервера: ${jsonData['message']}');
+          print('Server error: ${jsonData['message']}');
           break;
       }
     } catch (e) {
-      print('Ошибка обработки сообщения: $e');
+      print('Error processing message: $e');
     }
   }
 
-  // Совместимость: синхронная обёртка
+  // Compatibility: synchronous wrapper
   void _handleNewMessage(Map<String, dynamic> data) {
     _handleNewMessageAsync(data);
   }
 
-  // Асинхронная обработка: пытаемся расшифровать, затем пушим в стрим
+  // Async handling: try to decrypt, then push to stream
   Future<void> _handleNewMessageAsync(Map<String, dynamic> data) async {
     try {
       final Map<String, dynamic> msgJson = Map<String, dynamic>.from(data);
 
-      // Пытаемся расшифровать, если есть encryptedContent
+      // Try to decrypt if there is encryptedContent
       final decrypted = await _tryDecryptMessage(msgJson);
       if (decrypted != null) {
         msgJson['content'] = decrypted;
         msgJson['isEncrypted'] = true;
       } else {
-        // Если это наше же сообщение и расшифровки нет — не показываем зашифрованный JSON
+        // If this is our own message and there's no decryption — don't show encrypted JSON
         final sid = msgJson['senderId'];
         final hasEnc = msgJson['encryptedContent'] != null;
         if (sid != null && sid == _userId && hasEnc) {
           print('DEBUG _handleNewMessageAsync: own echoed message without decryption, skip to avoid showing encrypted JSON');
           return;
         }
-        // Фолбек: если encryptedContent является простой строкой (не JSON), трактуем её как plaintext
+        // Fallback: if encryptedContent is a plain string (not JSON), treat it as plaintext
         final encField = msgJson['encryptedContent'];
         if (encField is String) {
           try {
-            // Если это не JSON — будет исключение, значит это простой текст
+            // If it's not JSON — exception will be thrown, meaning it's plain text
             jsonDecode(encField);
           } catch (_) {
             msgJson['content'] = encField;
             msgJson['isEncrypted'] = false;
-            print('DEBUG _handleNewMessageAsync: plaintext fallback из encryptedContent строки');
+            print('DEBUG _handleNewMessageAsync: plaintext fallback from encryptedContent string');
           }
         }
       }
 
       final message = Message.fromJson(msgJson);
-      print('DEBUG NetworkService._handleNewMessageAsync: Создано сообщение: ${message.id}');
+      print('DEBUG NetworkService._handleNewMessageAsync: Created message: ${message.id}');
       _storeInMemory(message);
       _newMessageController.add(message);
     } catch (e) {
-      print('Ошибка обработки нового сообщения: $e');
+      print('Error handling new message: $e');
     }
   }
 
@@ -719,19 +719,19 @@ class NetworkService {
       final list = _inMemoryByPeer.putIfAbsent(key, () => <Message>[]);
       list.add(message);
       list.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      // Можно ограничить размер в будущем (например, до 200 сообщений)
+      // We can limit the size in the future (e.g., to 200 messages)
     } catch (e) {
-      print('DEBUG _storeInMemory: ошибка: $e');
+      print('DEBUG _storeInMemory: error: $e');
     }
   }
 
-  // Возвращает plaintext или null, если расшифровать не удалось/не требуется
+  // Returns plaintext or null if decryption failed/not required
   Future<String?> _tryDecryptMessage(Map<String, dynamic> msgJson) async {
     try {
       final encField = msgJson['encryptedContent'];
       if (encField == null) return null;
 
-      // encryptedContent может быть plain-строкой или JSON-строкой EncryptedMessage
+      // encryptedContent can be a plain string or JSON string of EncryptedMessage
       EncryptedMessage? enc;
       if (encField is String) {
         try {
@@ -740,7 +740,7 @@ class NetworkService {
             enc = EncryptedMessage.fromJson(parsed);
           }
         } catch (_) {
-          // не JSON — вероятно, plaintext
+          // not JSON — likely plaintext
           return null;
         }
       } else if (encField is Map<String, dynamic>) {
@@ -752,11 +752,11 @@ class NetworkService {
       final senderId = msgJson['senderId'] as String?;
       if (senderId == null) return null;
 
-      // Нужны публичные ключи отправителя
+      // Sender's public keys are required
       String? encKeyB64 = _publicEncKeys[senderId];
       String? signKeyB64 = _publicSignKeys[senderId];
       if (encKeyB64 == null || signKeyB64 == null) {
-        // если сообщение наше собственное — возьмём публичные ключи из KeyManager
+        // if the message is our own — take public keys from KeyManager
         if (senderId == _userId) {
           try {
             final keys = await KeyManager.loadUserKeys();
@@ -770,7 +770,7 @@ class NetworkService {
             }
           } catch (_) {}
         }
-        // иначе попробуем подтянуть список пользователей
+        // otherwise try to fetch the users list
         if (encKeyB64 == null || signKeyB64 == null) {
           await _ensureRecipientKeys(senderId);
         }
@@ -786,15 +786,15 @@ class NetworkService {
       final plaintext = await CryptoEngine.decryptMessage(enc, senderEncKey, senderSignKey);
       return plaintext;
     } catch (e) {
-      print('DEBUG _tryDecryptMessage: не удалось расшифровать: $e');
+      print('DEBUG _tryDecryptMessage: failed to decrypt: $e');
       return null;
     }
   }
 
   void _handleUserStatusUpdate(Map<String, dynamic> data) {
     try {
-      print('DEBUG NetworkService._handleUserStatusUpdate: Обновление статуса пользователя: $data');
-      // Нормализуем ключи: допускаем user_id/online и строковые булевы
+      print('DEBUG NetworkService._handleUserStatusUpdate: User status update: $data');
+      // Normalize keys: allow user_id/online and string booleans
       final uid = (data['userId'] ?? data['user_id']) as String?;
       dynamic onlineRaw = data['isOnline'] ?? data['online'] ?? data['status'];
       bool isOnline;
@@ -811,14 +811,14 @@ class NetworkService {
       if (uid != null) {
         final normalized = {'userId': uid, 'isOnline': isOnline};
         _userStatusController.add(normalized);
-        // Обновляем локальное состояние онлайна
+        // Update local online state
         if (isOnline) {
           _onlineUsers.add(uid);
-          // Пробуем отправить отложенные сообщения этому пользователю
+          // Try to send deferred messages to this user
           final pending = _pendingByReceiver.remove(uid);
           if (pending != null && pending.isNotEmpty) {
-            print('DEBUG NetworkService: Флаш отложенных сообщений для $uid: ${pending.length}');
-            // Последовательно отправляем, не дублируя локальные сообщения
+            print('DEBUG NetworkService: Flushing deferred messages for $uid: ${pending.length}');
+            // Send sequentially, without duplicating local messages
             () async {
               for (final p in pending) {
                 try { await _sendToServer(p.receiverId, p.content, p.type, timestamp: p.timestamp, emitLocal: false); } catch (_) {}
@@ -830,7 +830,7 @@ class NetworkService {
         }
       }
     } catch (e) {
-      print('Ошибка обработки обновления статуса пользователя: $e');
+      print('Error handling user status update: $e');
     }
   }
 
@@ -886,7 +886,7 @@ class NetworkService {
     _newChatController.close();
   }
 
-  // Проверка текущего онлайн-статуса пользователя по локальному набору
+  // Check the current user's online status using the local set
   bool isUserOnline(String userId) {
     return _onlineUsers.contains(userId);
   }
@@ -894,10 +894,10 @@ class NetworkService {
   void _sendMessage(Map<String, dynamic> message) {
     if (_channel != null) {
       final jsonMessage = jsonEncode(message);
-      print('DEBUG: Отправка сообщения на сервер: $jsonMessage');
+      print('DEBUG: Sending message to server: $jsonMessage');
       _channel!.sink.add(jsonMessage);
     } else {
-      print('DEBUG: Попытка отправить сообщение, но канал не подключен');
+      print('DEBUG: Attempted to send message, but channel is not connected');
     }
   }
 
@@ -906,7 +906,7 @@ class NetworkService {
       final completer = Completer<Map<String, dynamic>>();
       late StreamSubscription subscription;
       
-      // Слушаем через единый _broadcastStream, чтобы избежать дублирующих подписок
+      // Listen via unified _broadcastStream to avoid duplicate subscriptions
       final bs = _broadcastStream;
       if (bs == null) {
         throw StateError('Broadcast stream not initialized');
@@ -922,7 +922,7 @@ class NetworkService {
               }
             }
           } catch (e) {
-            print('Ошибка парсинга ответа: $e');
+            print('Error parsing response: $e');
           }
         },
         onError: (error) {
@@ -939,15 +939,15 @@ class NetworkService {
       
       return await completer.future.timeout(timeout);
     } catch (e) {
-      print('Ошибка ожидания ответа $expectedType: $e');
+      print('Error waiting for response $expectedType: $e');
       return null;
     }
   }
   
-  /// Добавляет пользователя в чат
+  /// Add a user to chat
   Future<bool> addUserToChat(String targetUserId) async {
     if (!_isConnected || _userId == null) {
-      print('DEBUG NetworkService.addUserToChat: Не подключен или нет userId');
+      print('DEBUG NetworkService.addUserToChat: Not connected or missing userId');
       return false;
     }
 
@@ -958,26 +958,26 @@ class NetworkService {
         'timestamp': DateTime.now().toIso8601String(),
       };
 
-      print('DEBUG NetworkService.addUserToChat: Отправка запроса: $message');
+      print('DEBUG NetworkService.addUserToChat: Sending request: $message');
       _channel!.sink.add(jsonEncode(message));
       
-      // Ждем ответ от сервера
+      // Wait for server response
       final response = await _waitForResponse('add_to_chat_success');
       if (response != null) {
-        print('DEBUG NetworkService.addUserToChat: Пользователь добавлен в чат');
+        print('DEBUG NetworkService.addUserToChat: User added to chat');
         return true;
       }
       
-      print('DEBUG NetworkService.addUserToChat: Ошибка при добавлении');
+      print('DEBUG NetworkService.addUserToChat: Error while adding');
       return false;
     } catch (e) {
-      print('DEBUG NetworkService.addUserToChat: Ошибка: $e');
+      print('DEBUG NetworkService.addUserToChat: Error: $e');
       return false;
     }
   }
 }
 
-// Приватная модель для локальной очереди сообщений (Option B: local outbox)
+// Private model for local message queue (Option B: local outbox)
 class _PendingMessage {
   final String receiverId;
   final String content;

@@ -3,30 +3,30 @@ import 'user_manager.dart';
 import 'package:cryptography/cryptography.dart';
 import 'dart:convert';
 
-/// Сервис аутентификации пользователей
+/// User authentication service
 class AuthService {
   final UserManager _userManager;
 
   AuthService(this._userManager);
 
-  /// Аутентифицирует пользователя по токену (упрощенный путь)
+  /// Authenticates a user by token (simplified path)
   User? authenticateUserByToken(String token) {
     return _userManager.getUserByToken(token);
   }
 
-  /// Проверяет валидность токена
+  /// Checks token validity
   bool isValidToken(String token) {
     return _userManager.getUserByToken(token) != null;
   }
 
-  /// Генерирует новый токен для пользователя
+  /// Generates a new token for a user
   String generateToken(String userId) {
-    // Простая генерация токена (в реальном приложении должна быть более безопасной)
+    // Simple token generation (should be more secure in a real app)
     return 'token_${userId}_${DateTime.now().millisecondsSinceEpoch}';
   }
 
-  /// Проверяет подпись Ed25519 для строки timestamp пользователем userId
-  /// Возвращает true, если подпись валидна.
+  /// Verifies Ed25519 signature for the timestamp string by the user with userId.
+  /// Returns true if the signature is valid.
   Future<bool> verifySignature(
     String userId,
     String timestamp,
@@ -52,18 +52,18 @@ class AuthService {
     }
   }
 
-  /// Современная аутентификация: проверка валидности подписи и актуальности timestamp
-  /// timestamp должен быть не старше 5 минут.
+  /// Modern authentication: verify signature validity and timestamp freshness.
+  /// The timestamp must be no older than 5 minutes.
   Future<bool> authenticateUser(
     String userId,
     String signatureBase64,
     String timestamp,
   ) async {
-    // Проверяем, что пользователь существует
+    // Ensure the user exists
     final user = _userManager.getUser(userId);
     if (user == null) return false;
 
-    // Проверка свежести timestamp (±5 минут допускаем только в прошлое)
+    // Check timestamp freshness (allow only up to 5 minutes in the past)
     try {
       final ts = DateTime.parse(timestamp);
       final now = DateTime.now();
@@ -74,16 +74,16 @@ class AuthService {
       return false;
     }
 
-    // Проверяем подпись
+    // Verify signature
     final ok = await verifySignature(userId, timestamp, signatureBase64);
     if (!ok) return false;
 
-    // Помечаем пользователя как прошедшего аутентификацию (онлайн)
+    // Mark the user as authenticated (online)
     await _userManager.authenticateUser(userId);
     return true;
   }
 
-  /// Можно ли аутентифицировать пользователя (существует ли он)
+  /// Checks if the user can be authenticated (i.e., exists)
   Future<bool> canAuthenticate(String userId) async {
     return _userManager.getUser(userId) != null;
   }

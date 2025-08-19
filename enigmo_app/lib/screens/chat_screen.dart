@@ -31,7 +31,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _networkService = NetworkService(); // Получаем синглтон
+    _networkService = NetworkService(); // Get singleton
     _otherOnline = widget.chat.isOnline;
     _setupMessageListener();
     _loadMessages();
@@ -41,21 +41,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _setupMessageListener() {
     _newMsgSub = _networkService.newMessages.listen((message) {
-      print('DEBUG ChatScreen: Получено новое сообщение: ${message.id}');
+      print('DEBUG ChatScreen: Received new message: ${message.id}');
       print('DEBUG ChatScreen: senderId=${message.senderId}, receiverId=${message.receiverId}');
       print('DEBUG ChatScreen: otherUserId=${_getOtherUserId()}');
       
-      // Проверяем, относится ли сообщение к этому чату
+      // Check if the message belongs to this chat
       final otherUserId = _getOtherUserId();
       if (message.senderId == otherUserId || message.receiverId == otherUserId) {
-        print('DEBUG ChatScreen: Сообщение относится к этому чату, добавляем');
+        print('DEBUG ChatScreen: Message belongs to this chat, adding');
         setState(() {
           _messages.add(message);
           _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
         });
         _scrollToBottom();
       } else {
-        print('DEBUG ChatScreen: Сообщение НЕ относится к этому чату');
+        print('DEBUG ChatScreen: Message does NOT belong to this chat');
       }
     });
   }
@@ -65,10 +65,10 @@ class _ChatScreenState extends State<ChatScreen> {
     _statusSub = _networkService.userStatusUpdates.listen((data) {
       final uid = data['userId'] as String?;
       final isOnline = data['isOnline'] as bool?;
-      print('DEBUG ChatScreen._setupStatusListener: пришёл статус uid=$uid, isOnline=$isOnline, otherUserId=$otherUserId');
+      print('DEBUG ChatScreen._setupStatusListener: received status uid=$uid, isOnline=$isOnline, otherUserId=$otherUserId');
       if (uid == otherUserId && isOnline != null) {
         if (!isOnline) {
-          // Собеседник вышел полностью — закрываем чат и чистим локальные данные
+          // Peer went fully offline — close the chat and clear local data
           if (!_poppedOnOffline) {
             _poppedOnOffline = true;
             _networkService.clearPeerSession(otherUserId);
@@ -87,12 +87,12 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  // Разово обновляем статус собеседника из списка пользователей
+  // One-time refresh of the peer's status from the users list
   Future<void> _refreshOtherUserStatus() async {
     try {
       final otherUserId = _getOtherUserId();
-      print('DEBUG ChatScreen._refreshOtherUserStatus: запрос статуса для $otherUserId');
-      // Подпишемся один раз и дождёмся users_list
+      print('DEBUG ChatScreen._refreshOtherUserStatus: requesting status for $otherUserId');
+      // Subscribe once and wait for users_list
       late StreamSubscription usersSub;
       usersSub = _networkService.users.listen((users) {
         try {
@@ -109,7 +109,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     : onlineRaw is num
                         ? onlineRaw != 0
                         : false;
-            print('DEBUG ChatScreen._refreshOtherUserStatus: найден статус=$isOnline');
+            print('DEBUG ChatScreen._refreshOtherUserStatus: found status=$isOnline');
             setState(() {
               _otherOnline = isOnline;
             });
@@ -120,36 +120,36 @@ class _ChatScreenState extends State<ChatScreen> {
       });
       await _networkService.getUsers();
     } catch (e) {
-      print('DEBUG ChatScreen._refreshOtherUserStatus: ошибка: $e');
+      print('DEBUG ChatScreen._refreshOtherUserStatus: error: $e');
     }
   }
 
   String _getOtherUserId() {
-    // Получаем ID другого пользователя из участников чата
+    // Get the other user's ID from chat participants
     final result = widget.chat.participants.firstWhere(
       (id) => id != _networkService.userId,
       orElse: () {
-        print('DEBUG ChatScreen _getOtherUserId: Не найден другой пользователь, возвращаем первого: ${widget.chat.participants.first}');
+        print('DEBUG ChatScreen _getOtherUserId: Other user not found, returning first: ${widget.chat.participants.first}');
         return widget.chat.participants.first;
       },
     );
-    print('DEBUG ChatScreen _getOtherUserId: Результат=$result');
+    print('DEBUG ChatScreen _getOtherUserId: Result=$result');
     return result;
   }
 
   Future<void> _loadMessages() async {
-    // Загружаем сообщения из локального буфера сеанса
+    // Load messages from the local session buffer
     try {
       final otherUserId = _getOtherUserId();
       final msgs = _networkService.getRecentMessages(otherUserId);
-      print('DEBUG ChatScreen _loadMessages: загружено из буфера: ${msgs.length}');
+      print('DEBUG ChatScreen _loadMessages: loaded from buffer: ${msgs.length}');
       setState(() {
         _messages = msgs..sort((a, b) => a.timestamp.compareTo(b.timestamp));
         _isLoading = false;
       });
       _scrollToBottom();
     } catch (e) {
-      print('DEBUG ChatScreen _loadMessages: ошибка загрузки из буфера: $e');
+      print('DEBUG ChatScreen _loadMessages: error loading from buffer: $e');
       setState(() {
         _messages = [];
         _isLoading = false;
@@ -229,7 +229,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    _otherOnline ? 'в сети' : 'не в сети',
+                    _otherOnline ? 'online' : 'offline',
                     style: TextStyle(
                       fontSize: 12,
                       color: _otherOnline ? Colors.green : Colors.grey,
@@ -256,7 +256,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 : _messages.isEmpty
                     ? const Center(
                         child: Text(
-                          'Нет сообщений\nНапишите первое сообщение!',
+                          'No messages\nSend the first message!',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.grey),
                         ),
@@ -343,7 +343,7 @@ class _ChatScreenState extends State<ChatScreen> {
             child: TextField(
               controller: _messageController,
               decoration: InputDecoration(
-                hintText: 'Введите сообщение...',
+                hintText: 'Type a message...',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(25),
                   borderSide: BorderSide.none,
@@ -374,7 +374,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 )
               : IconButton(
                   onPressed: () {
-                    print('DEBUG: Кнопка отправки нажата');
+                    print('DEBUG: Send button pressed');
                     _sendMessage();
                   },
                   icon: const Icon(Icons.send),
@@ -393,7 +393,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _messageController.text.trim();
     print('DEBUG ChatScreen _sendMessage: text="$text", _isSending=$_isSending');
     if (text.isEmpty || _isSending) {
-      print('DEBUG ChatScreen _sendMessage: Выход - пустой текст или уже отправляется');
+      print('DEBUG ChatScreen _sendMessage: Exit - empty text or already sending');
       return;
     }
 
@@ -413,16 +413,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (success) {
         _messageController.clear();
-        // Сообщение будет добавлено через listener при получении подтверждения
+        // The message will be added via listener upon receiving confirmation
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не удалось отправить сообщение')),
+          const SnackBar(content: Text('Failed to send message')),
         );
       }
     } catch (e) {
-      print('Ошибка отправки сообщения: $e');
+      print('Error sending message: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка: $e')),
+        SnackBar(content: Text('Error: $e')),
       );
     } finally {
       setState(() {

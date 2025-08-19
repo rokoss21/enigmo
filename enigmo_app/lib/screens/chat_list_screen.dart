@@ -21,7 +21,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   bool _isConnected = false;
   Timer? _refreshTimer;
   String? _currentUserId;
-  String? _activeChatUserId; // пользователь, чат с которым сейчас открыт
+  String? _activeChatUserId; // user whose chat is currently open
   StreamSubscription<Map<String, dynamic>>? _statusSub;
   bool _isResetting = false;
 
@@ -34,7 +34,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       final isOnline = data['isOnline'] as bool? ?? false;
       if (uid == null || uid == _currentUserId) return;
       if (!isOnline) {
-        // Пользователь вышел — удаляем чат и чистим локальные данные
+        // User went offline — remove chat and clear local data
         _networkService.clearPeerSession(uid);
         setState(() {
           _chats.removeWhere((c) => c.id == uid);
@@ -46,7 +46,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     });
   }
 
-  /// Полный сброс сессии: очистка локальных данных, новый ID и переподключение
+  /// Full session reset: clear local data, new ID, and reconnect
   Future<void> _resetAll() async {
     if (_isResetting) return;
     setState(() {
@@ -69,20 +69,20 @@ class _ChatListScreenState extends State<ChatListScreen> {
         });
         _startPeriodicRefresh();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Новая сессия создана. Вы получили новый ID')),
+          const SnackBar(content: Text('New session created. You received a new ID')),
         );
       } else {
         setState(() {
           _isConnected = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не удалось создать новую сессию'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Failed to create a new session'), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) {
@@ -95,125 +95,125 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   Future<void> _initializeNetwork() async {
-    print('INFO ChatListScreen._initializeNetwork: Начало инициализации сети');
+    print('INFO ChatListScreen._initializeNetwork: Starting network initialization');
     
     setState(() {
       _isConnecting = true;
     });
 
     try {
-      // Подключаемся к серверу
-      print('INFO ChatListScreen._initializeNetwork: Подключение к серверу');
+      // Connect to the server
+      print('INFO ChatListScreen._initializeNetwork: Connecting to server');
       final connected = await _networkService.connect();
       
       if (!connected) {
-        throw Exception('Не удалось подключиться к серверу');
+        throw Exception('Failed to connect to server');
       }
       
-      print('INFO ChatListScreen._initializeNetwork: Подключение к серверу успешно');
+      print('INFO ChatListScreen._initializeNetwork: Connected to server successfully');
       
-      // Проверяем, есть ли сохраненный userId
+      // Check if there is a stored userId
       final storedUserId = await KeyManager.getUserId();
-      print('INFO ChatListScreen._initializeNetwork: Сохраненный userId: $storedUserId');
+      print('INFO ChatListScreen._initializeNetwork: Stored userId: $storedUserId');
       
       bool needsRegistration = storedUserId == null;
       
       if (!needsRegistration) {
         try {
-          print('INFO ChatListScreen._initializeNetwork: Попытка аутентификации с существующим userId');
-          // Пытаемся аутентифицироваться с существующим userId
+          print('INFO ChatListScreen._initializeNetwork: Attempting authentication with existing userId');
+          // Try to authenticate with existing userId
           final authenticated = await _networkService.authenticate();
           if (!authenticated) {
-            print('WARNING ChatListScreen._initializeNetwork: Аутентификация неудачна, требуется регистрация');
+            print('WARNING ChatListScreen._initializeNetwork: Authentication failed, registration required');
             needsRegistration = true;
           } else {
-            print('INFO ChatListScreen._initializeNetwork: Аутентификация успешна');
+            print('INFO ChatListScreen._initializeNetwork: Authentication successful');
           }
         } catch (e) {
-          print('ERROR ChatListScreen._initializeNetwork: Ошибка аутентификации: $e');
+          print('ERROR ChatListScreen._initializeNetwork: Authentication error: $e');
           needsRegistration = true;
         }
       }
       
       if (needsRegistration) {
-        print('INFO ChatListScreen._initializeNetwork: Регистрация нового пользователя');
-        // Если аутентификация не удалась, регистрируем нового пользователя
-        final userId = await _networkService.registerUser(nickname: 'Пользователь');
+        print('INFO ChatListScreen._initializeNetwork: Registering new user');
+        // If authentication failed, register a new user
+        final userId = await _networkService.registerUser(nickname: 'User');
         if (userId != null) {
-          print('INFO ChatListScreen._initializeNetwork: Пользователь зарегистрирован: $userId');
+          print('INFO ChatListScreen._initializeNetwork: User registered: $userId');
           final authSuccess = await _networkService.authenticate();
           if (!authSuccess) {
-            throw Exception('Не удалось аутентифицироваться после регистрации');
+            throw Exception('Failed to authenticate after registration');
           }
-          print('INFO ChatListScreen._initializeNetwork: Аутентификация после регистрации успешна');
+          print('INFO ChatListScreen._initializeNetwork: Authentication after registration successful');
         } else {
-          throw Exception('Не удалось зарегистрировать пользователя');
+          throw Exception('Failed to register user');
         }
       }
       
-      // Загружаем список чатов
-      print('INFO ChatListScreen._initializeNetwork: Загрузка чатов');
+      // Load chats list
+      print('INFO ChatListScreen._initializeNetwork: Loading chats');
       await _loadChats();
       
-      // Запускаем периодическое обновление списка пользователей
+      // Start periodic users list refresh
       _startPeriodicRefresh();
       
-      // Слушаем новые сообщения
+      // Listen for new messages
       _networkService.newMessages.listen((message) {
-        print('INFO ChatListScreen: Получено новое сообщение: ${message.id}');
+        print('INFO ChatListScreen: Received new message: ${message.id}');
         _handleNewMessage(message);
       });
       
-      // Слушаем обновления списка пользователей
+      // Listen for chats list updates
       _networkService.chats.listen((chats) {
-        print('INFO ChatListScreen: Обновление списка чатов: ${chats.length} чатов');
+        print('INFO ChatListScreen: Chats list updated: ${chats.length} chats');
         setState(() {
-          // Обновляем только если список не пустой или если мы очищаем список
+          // Update only if list is not empty or we are clearing the list
           if (chats.isNotEmpty || _chats.isNotEmpty) {
             _chats = chats;
           }
         });
       });
       
-      // Слушаем статус подключения
+      // Listen for connection status
       _networkService.connectionStatus.listen((connected) {
-        print('INFO ChatListScreen: Изменение статуса подключения: $connected');
+        print('INFO ChatListScreen: Connection status changed: $connected');
         setState(() {
           _isConnected = connected;
           if (!connected) {
             _refreshTimer?.cancel();
           } else {
-            // При восстановлении подключения пытаемся переаутентифицироваться
+            // On reconnection, try to re-authenticate
             _handleReconnection();
           }
         });
       });
       
-      // Слушаем уведомления о новых чатах
+      // Listen for new chat notifications
       _networkService.newChatNotifications.listen((userId) {
-        print('INFO ChatListScreen: Уведомление о новом чате: $userId');
+        print('INFO ChatListScreen: New chat notification: $userId');
         _handleNewChatNotification({'userId': userId});
       });
       
-      // Слушаем обновления статуса пользователей
+      // Listen for user status updates
       _networkService.userStatusUpdates.listen((statusData) {
-        print('INFO ChatListScreen: Обновление статуса пользователя: $statusData');
+        print('INFO ChatListScreen: User status update: $statusData');
         _handleUserStatusUpdate(statusData);
       });
       
-      // Устанавливаем статус подключения как активный
+      // Set connection status as active
       setState(() {
         _isConnected = true;
         _currentUserId = _networkService.userId;
       });
-      // Инициализируем статусы онлайна (users_list)
+      // Initialize online statuses (users_list)
       try {
         await _networkService.getUsers();
       } catch (_) {}
       
-      print('INFO ChatListScreen._initializeNetwork: Инициализация сети завершена успешно');
+      print('INFO ChatListScreen._initializeNetwork: Network initialization finished successfully');
     } catch (e, stackTrace) {
-      print('ERROR ChatListScreen._initializeNetwork: Ошибка инициализации сети: $e');
+      print('ERROR ChatListScreen._initializeNetwork: Network initialization error: $e');
       print('STACK: $stackTrace');
       
       setState(() {
@@ -223,7 +223,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка подключения к серверу: $e'),
+            content: Text('Server connection error: $e'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 5),
           ),
@@ -239,45 +239,45 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   Future<void> _loadChats() async {
-    print('INFO ChatListScreen._loadChats: Загрузка чатов');
-    // Убираем автоматическую загрузку всех пользователей
-    // Теперь чаты будут добавляться только через диалог добавления
+    print('INFO ChatListScreen._loadChats: Loading chats');
+    // Remove automatic loading of all users
+    // Now chats will be added only via the add dialog
     setState(() {
-      // Оставляем только существующие чаты, не загружаем всех пользователей
+      // Keep only existing chats, do not load all users
     });
   }
 
-  /// Обрабатывает переподключение
+  /// Handles reconnection
   Future<void> _handleReconnection() async {
-    print('INFO ChatListScreen._handleReconnection: Обработка переподключения');
+    print('INFO ChatListScreen._handleReconnection: Handling reconnection');
     
     if (!_isConnected) {
-      print('WARNING ChatListScreen._handleReconnection: Нет подключения, пропускаем переаутентификацию');
+      print('WARNING ChatListScreen._handleReconnection: No connection, skipping re-authentication');
       return;
     }
     
     try {
       final storedUserId = await KeyManager.getUserId();
       if (storedUserId != null) {
-        print('INFO ChatListScreen._handleReconnection: Попытка переаутентификации');
+        print('INFO ChatListScreen._handleReconnection: Attempting re-authentication');
         final authenticated = await _networkService.authenticate();
         if (authenticated) {
-          print('INFO ChatListScreen._handleReconnection: Переаутентификация успешна');
+          print('INFO ChatListScreen._handleReconnection: Re-authentication successful');
           setState(() {
             _currentUserId = _networkService.userId;
           });
           _startPeriodicRefresh();
         } else {
-          print('WARNING ChatListScreen._handleReconnection: Переаутентификация неудачна');
+          print('WARNING ChatListScreen._handleReconnection: Re-authentication failed');
         }
       }
     } catch (e) {
-      print('ERROR ChatListScreen._handleReconnection: Ошибка переаутентификации: $e');
+      print('ERROR ChatListScreen._handleReconnection: Re-authentication error: $e');
     }
   }
 
   void _handleNewMessage(Message message) {
-    // Обновляем соответствующий чат
+    // Update the corresponding chat
     setState(() {
       final chatIndex = _chats.indexWhere((chat) => 
         chat.participants.contains(message.senderId) || chat.participants.contains(message.receiverId));
@@ -295,20 +295,20 @@ class _ChatListScreenState extends State<ChatListScreen> {
           lastActivity: message.timestamp,
         );
         
-        // Перемещаем чат в начало списка
+        // Move the chat to the top of the list
         final chat = _chats.removeAt(chatIndex);
         _chats.insert(0, chat);
       }
     });
   }
 
-  /// Запускает периодическое обновление списка пользователей
+  /// Starts periodic refresh of the users list
   void _startPeriodicRefresh() {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       if (_isConnected && mounted) {
         _loadChats();
-        // Регулярно обновляем список пользователей, чтобы подтянуть статусы онлайна
+        // Regularly update the users list to fetch online statuses
         _networkService.getUsers();
       }
     });
@@ -338,7 +338,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         ),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          // Индикатор подключения
+          // Connection indicator
           Container(
             margin: const EdgeInsets.only(right: 16),
             child: Row(
@@ -351,7 +351,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  _isConnected ? 'Онлайн' : 'Офлайн',
+                  _isConnected ? 'Online' : 'Offline',
                   style: TextStyle(
                     color: _isConnected ? Colors.green : Colors.red,
                     fontSize: 12,
@@ -373,7 +373,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Подключение к серверу...'),
+                  Text('Connecting to server...'),
                 ],
               ),
             )
@@ -385,12 +385,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey),
                       SizedBox(height: 16),
                       Text(
-                        'Нет активных чатов',
+                        'No active chats',
                         style: TextStyle(fontSize: 18, color: Colors.grey),
                       ),
                       SizedBox(height: 8),
                       Text(
-                        'Другие пользователи появятся здесь',
+                        'Other users will appear here',
                         style: TextStyle(color: Colors.grey),
                       ),
                     ],
@@ -405,7 +405,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 ),
       floatingActionButton: FloatingActionButton(
         onPressed: _isResetting ? null : _resetAll,
-        tooltip: 'Новая сессия',
+        tooltip: 'New session',
         child: _isResetting
             ? const SizedBox(
                 width: 24,
@@ -421,10 +421,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final online = chat.isOnline || _networkService.isUserOnline(chat.id);
     return InkWell(
       onTap: () async {
-        print('DEBUG: Переход в чат с пользователем: ${chat.name} (ID: ${chat.id})');
+        print('DEBUG: Navigating to chat with user: ${chat.name} (ID: ${chat.id})');
         setState(() {
-          _activeChatUserId = chat.id; // для direct чатов id = userId собеседника
-          // Сбрасываем счётчик непрочитанных сразу при входе в чат
+          _activeChatUserId = chat.id; // for direct chats, id = peer userId
+          // Reset unread counter immediately upon entering the chat
           final idx = _chats.indexWhere((c) => c.id == chat.id);
           if (idx != -1) {
             _chats[idx] = _chats[idx].copyWith(unreadCount: 0);
@@ -436,7 +436,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             builder: (context) => ChatScreen(chat: chat),
           ),
         );
-        // Вернулись из чата — обнуляем счётчик непрочитанных
+        // Returned from chat — reset unread counter
         setState(() {
           final idx = _chats.indexWhere((c) => c.id == chat.id);
           if (idx != -1) {
@@ -526,7 +526,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          chat.lastMessage?.content ?? 'Нет сообщений',
+                          chat.lastMessage?.content ?? 'No messages',
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 14,
@@ -570,42 +570,42 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final difference = now.difference(dateTime);
 
     if (difference.inDays > 0) {
-      return '${difference.inDays}д';
+      return '${difference.inDays}d';
     } else if (difference.inHours > 0) {
-      return '${difference.inHours}ч';
+      return '${difference.inHours}h';
     } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}м';
+      return '${difference.inMinutes}m';
     } else {
-      return 'сейчас';
+      return 'now';
     }
   }
 
-  /// Копирует ID пользователя в буфер обмена
+  /// Copies the user's ID to the clipboard
   void _copyUserId() {
     if (_currentUserId != null) {
       Clipboard.setData(ClipboardData(text: _currentUserId!));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('ID скопирован в буфер обмена'),
+          content: Text('ID copied to clipboard'),
           duration: Duration(seconds: 2),
         ),
       );
     }
   }
 
-  /// Показывает диалог добавления пользователя
+  /// Shows the add user dialog
   void _showAddUserDialog() {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Добавить пользователя'),
+          title: const Text('Add user'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
                 leading: const Icon(Icons.copy),
-                title: const Text('Скопировать мой ID'),
+                title: const Text('Copy my ID'),
                 subtitle: Text(_currentUserId ?? ''),
                 onTap: () {
                   _copyUserId();
@@ -615,8 +615,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.person_add),
-                title: const Text('Добавить в чат'),
-                subtitle: const Text('Введите ID пользователя'),
+                title: const Text('Add to chat'),
+                subtitle: const Text('Enter user ID'),
                 onTap: () {
                   Navigator.of(context).pop();
                   _showAddUserByIdDialog();
@@ -627,7 +627,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Отмена'),
+              child: const Text('Cancel'),
             ),
           ],
         );
@@ -635,7 +635,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  /// Показывает диалог ввода ID пользователя
+  /// Shows the dialog to input a user ID
   void _showAddUserByIdDialog() {
     final TextEditingController controller = TextEditingController();
     
@@ -643,19 +643,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Добавить пользователя'),
+          title: const Text('Add user'),
           content: TextField(
             controller: controller,
             decoration: const InputDecoration(
-              labelText: 'ID пользователя',
-              hintText: 'Введите ID пользователя для добавления в чат',
+              labelText: 'User ID',
+              hintText: 'Enter a user ID to add to chat',
             ),
             autofocus: true,
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Отмена'),
+              child: const Text('Cancel'),
             ),
             TextButton(
               onPressed: () {
@@ -665,7 +665,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   _addUserToChat(userId);
                 }
               },
-              child: const Text('Добавить'),
+              child: const Text('Add'),
             ),
           ],
         );
@@ -673,7 +673,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  /// Обрабатывает обновления статуса пользователей
+  /// Handles user status updates
   void _handleUserStatusUpdate(Map<String, dynamic> data) {
     final userId = data['userId'] as String?;
     final isOnline = data['isOnline'] as bool? ?? false;
@@ -681,19 +681,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
     if (userId == null) return;
     
     setState(() {
-      // Находим чат с этим пользователем и обновляем его статус
+      // Find the chat with this user and update its status
       final chatIndex = _chats.indexWhere((chat) => 
         chat.participants.contains(userId));
       
       if (chatIndex != -1) {
         _chats[chatIndex] = _chats[chatIndex].copyWith(isOnline: isOnline);
-        print('INFO ChatListScreen: Обновлен статус пользователя $userId: ${isOnline ? "онлайн" : "офлайн"}');
+        print('INFO ChatListScreen: Updated user $userId status: ${isOnline ? "online" : "offline"}');
       }
     });
   }
 
-  /// Добавляет пользователя в чат по ID
-  /// Обрабатывает уведомление о добавлении в чат другим пользователем
+  /// Adds a user to chat by ID
+  /// Handles a notification about being added to a chat by another user
   void _handleNewChatNotification(Map<String, dynamic> data) {
     final userId = data['userId'] as String;
     final nickname = data['nickname'] as String?;
@@ -701,12 +701,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final isOnline = data['isOnline'] as bool? ?? false;
     final lastSeen = data['lastSeen'] as String?;
     
-    // Проверяем, есть ли уже чат с этим пользователем
+    // Check if a chat with this user already exists
     final existingChatIndex = _chats.indexWhere((chat) =>
       chat.participants.contains(userId));
     
     if (existingChatIndex == -1) {
-      // Создаем новый чат
+      // Create a new chat
       final newChat = Chat(
         id: userId,
         name: nickname ?? userId,
@@ -726,13 +726,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(isInitiator
-              ? 'Пользователь $displayName добавлен в чаты'
-              : 'Пользователь $displayName добавил вас в чат'),
+              ? 'User $displayName added to chats'
+              : 'User $displayName added you to a chat'),
           backgroundColor: isInitiator ? Colors.green : Colors.blue,
         ),
       );
     } else if (isInitiator) {
-      // Если это инициатор и чат уже существует, просто переходим к нему
+      // If this is the initiator and the chat already exists, just navigate to it
       final existingChat = _chats[existingChatIndex];
       Navigator.push(
         context,
@@ -745,30 +745,30 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   Future<void> _addUserToChat(String userId) async {
     try {
-      // Проверяем, что это не наш собственный ID
+      // Ensure this is not our own ID
       if (userId == _currentUserId) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Нельзя добавить самого себя в чат'),
+            content: Text('You cannot add yourself to a chat'),
             backgroundColor: Colors.orange,
           ),
         );
         return;
       }
 
-      // Проверяем, есть ли уже чат с этим пользователем
+      // Check if a chat with this user already exists
       final existingChatIndex = _chats.indexWhere((chat) => 
         chat.participants.contains(userId));
       
       if (existingChatIndex != -1) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Чат с этим пользователем уже существует'),
+            content: Text('A chat with this user already exists'),
             backgroundColor: Colors.orange,
           ),
         );
         
-        // Переходим к существующему чату
+        // Navigate to the existing chat
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -778,10 +778,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
         return;
       }
 
-      // Отправляем запрос на сервер для добавления пользователя в чат
+      // Send a request to the server to add the user to the chat
       await _networkService.addUserToChat(userId);
       
-      // Создаем локальный чат для инициатора
+      // Create a local chat for the initiator
       final targetUser = Chat(
         id: userId,
         name: userId,
@@ -793,19 +793,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
         isOnline: false,
       );
 
-      // Добавляем новый чат
+      // Add the new chat
       setState(() {
         _chats.insert(0, targetUser);
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Пользователь $userId добавлен в чаты'),
+          content: Text('User $userId added to chats'),
           backgroundColor: Colors.green,
         ),
       );
 
-      // Переходим к новому чату
+      // Navigate to the new chat
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -814,10 +814,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
       );
 
     } catch (e) {
-      print('Ошибка добавления пользователя: $e');
+      print('Error adding user: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Ошибка: ${e.toString()}'),
+          content: Text('Error: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );

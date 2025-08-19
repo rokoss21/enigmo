@@ -33,7 +33,7 @@ class UserManager {
     _users[user1.id] = user1;
     _users[user2.id] = user2;
 
-    print('DEBUG UserManager: Инициализированы пользователи по умолчанию');
+    print('DEBUG UserManager: Default users initialized');
   }
 
   Future<User?> registerUser({
@@ -56,7 +56,7 @@ class UserManager {
     );
 
     _users[id] = user;
-    print('INFO: Пользователь зарегистрирован: $id');
+    print('INFO: User registered: $id');
     return user;
   }
 
@@ -67,16 +67,16 @@ class UserManager {
         isOnline: true,
         lastSeen: DateTime.now(),
       );
-      print('INFO: Пользователь $userId аутентифицирован');
-      // Возвращаем обновлённый экземпляр пользователя с isOnline=true
+      print('INFO: User $userId authenticated');
+      // Return the updated user instance with isOnline=true
       return _users[userId];
     }
     return null;
   }
 
-  /// Получает пользователя по токену (упрощенная реализация)
+  /// Gets a user by token (simplified implementation)
   User? getUserByToken(String token) {
-    // Простая реализация: извлекаем userId из токена
+    // Simple implementation: extract userId from token
     if (token.startsWith('token_')) {
       final parts = token.split('_');
       if (parts.length >= 2) {
@@ -88,7 +88,7 @@ class UserManager {
   }
 
   void connectUser(String userId, WebSocketChannel channel) {
-    print('DEBUG UserManager.connectUser: Подключение пользователя $userId');
+    print('DEBUG UserManager.connectUser: Connecting user $userId');
     
     _userChannels[userId] = channel;
     _channelToUserId[channel] = userId;
@@ -99,15 +99,15 @@ class UserManager {
         lastSeen: DateTime.now(),
       );
       
-      // Уведомляем всех пользователей о том, что пользователь подключился
+      // Notify all users that the user connected
       _broadcastUserStatusUpdate(userId, true);
     }
     
-    print('DEBUG UserManager.connectUser: Пользователь $userId подключен, активных подключений: ${_userChannels.length}');
+    print('DEBUG UserManager.connectUser: User $userId connected, active connections: ${_userChannels.length}');
   }
 
   void disconnectUser(String userId) {
-    print('DEBUG UserManager.disconnectUser: Отключение пользователя $userId');
+    print('DEBUG UserManager.disconnectUser: Disconnecting user $userId');
     
     final channel = _userChannels.remove(userId);
     if (channel != null) {
@@ -120,11 +120,11 @@ class UserManager {
         lastSeen: DateTime.now(),
       );
       
-      // Уведомляем всех пользователей о том, что пользователь отключился
+      // Notify all users that the user disconnected
       _broadcastUserStatusUpdate(userId, false);
     }
     
-    print('DEBUG UserManager.disconnectUser: Пользователь $userId отключен, активных подключений: ${_userChannels.length}');
+    print('DEBUG UserManager.disconnectUser: User $userId disconnected, active connections: ${_userChannels.length}');
   }
 
   void disconnectChannel(WebSocketChannel channel) {
@@ -159,25 +159,25 @@ class UserManager {
   }
 
   Future<bool> sendToUser(String userId, Map<String, dynamic> message) async {
-    print('DEBUG UserManager.sendToUser: Попытка отправить сообщение пользователю $userId');
-    print('DEBUG UserManager.sendToUser: Сообщение: $message');
+    print('DEBUG UserManager.sendToUser: Attempting to send message to user $userId');
+    print('DEBUG UserManager.sendToUser: Message: $message');
     
     final channel = _userChannels[userId];
     if (channel == null) {
-      print('DEBUG UserManager.sendToUser: Канал для пользователя $userId не найден');
+      print('DEBUG UserManager.sendToUser: Channel for user $userId not found');
       return false;
     }
 
     try {
       final jsonMessage = jsonEncode(message);
       channel.sink.add(jsonMessage);
-      print('DEBUG UserManager.sendToUser: Сообщение успешно отправлено пользователю $userId');
+      print('DEBUG UserManager.sendToUser: Message successfully sent to user $userId');
       return true;
     } catch (e) {
-      print('DEBUG UserManager.sendToUser: Ошибка отправки сообщения пользователю $userId: $e');
-      print('ERROR: Ошибка отправки сообщения пользователю $userId: $e');
+      print('DEBUG UserManager.sendToUser: Error sending message to user $userId: $e');
+      print('ERROR: Error sending message to user $userId: $e');
       
-      // Удаляем неисправное соединение
+      // Remove the faulty connection
       disconnectUser(userId);
       return false;
     }
@@ -190,7 +190,7 @@ class UserManager {
     };
   }
 
-  /// Статистика пользователей для тестов: total/online/offline
+  /// User statistics for tests: total/online/offline
   Map<String, int> getUserStats() {
     final total = _users.length;
     final online = _userChannels.length;
@@ -202,7 +202,7 @@ class UserManager {
     };
   }
 
-  /// Отправляет уведомление о смене статуса пользователя всем подключенным клиентам
+  /// Sends a user status update notification to all connected clients
   void _broadcastUserStatusUpdate(String userId, bool isOnline) {
     final statusMessage = {
       'type': 'user_status_update',
@@ -211,14 +211,14 @@ class UserManager {
       'timestamp': DateTime.now().toIso8601String(),
     };
 
-    print('DEBUG UserManager._broadcastUserStatusUpdate: Отправка обновления статуса для $userId: ${isOnline ? "онлайн" : "офлайн"}');
+    print('DEBUG UserManager._broadcastUserStatusUpdate: Sending status update for $userId: ${isOnline ? "online" : "offline"}');
 
-    // Отправляем всем подключенным пользователям
+    // Send to all connected users
     for (final channel in _userChannels.values) {
       try {
         channel.sink.add(jsonEncode(statusMessage));
       } catch (e) {
-        print('ERROR UserManager._broadcastUserStatusUpdate: Ошибка отправки обновления статуса: $e');
+        print('ERROR UserManager._broadcastUserStatusUpdate: Error sending status update: $e');
       }
     }
   }

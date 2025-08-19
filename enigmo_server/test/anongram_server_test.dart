@@ -3,7 +3,7 @@ import 'package:test/test.dart';
 
 void main() {
   group('AnogramServer Tests', () {
-    test('должен создать экземпляр сервера', () {
+    test('should create a server instance', () {
       final server = AnogramServer();
       expect(server, isNotNull);
       expect(server, isA<AnogramServer>());

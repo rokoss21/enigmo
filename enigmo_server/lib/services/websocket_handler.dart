@@ -13,7 +13,7 @@ import 'message_manager.dart';
 import 'auth_service.dart';
 
 
-/// Обработчик WebSocket соединений
+/// WebSocket connections handler
 class WebSocketHandler {
   final Logger _logger = Logger();
   final UserManager _userManager;
@@ -22,45 +22,45 @@ class WebSocketHandler {
   
   WebSocketHandler(this._userManager, this._messageManager) : _authService = AuthService(_userManager);
 
-  /// Создает обработчик WebSocket
+  /// Creates a WebSocket handler
   Handler get handler => webSocketHandler(_handleWebSocket);
 
-  /// Обрабатывает новое WebSocket соединение
+  /// Handles a new WebSocket connection
   void _handleWebSocket(WebSocketChannel webSocket) {
     String? userId;
     
-    _logger.info('Новое WebSocket соединение');
+    _logger.info('New WebSocket connection');
 
     webSocket.stream.listen(
       (data) async {
         try {
           final message = jsonDecode(data as String) as Map<String, dynamic>;
           
-          // Обновляем userId если пользователь аутентифицировался
+          // Update userId if the user authenticated
           if (message['type'] == 'auth') {
             final tempUserId = message['userId'] as String?;
             final user = tempUserId != null ? await _userManager.authenticateUser(tempUserId) : null;
             if (user != null) {
               userId = tempUserId;
               _userManager.connectUser(userId!, webSocket);
-              // Эфемерный режим: оффлайн-доставка отключена
+              // Ephemeral mode: offline delivery is disabled
             }
           }
           
           await _handleMessage(webSocket, message, userId);
         } catch (e, stackTrace) {
-          _logger.error('Ошибка обработки сообщения: $e');
-          _sendError(webSocket, 'Ошибка обработки сообщения: $e');
+          _logger.error('Message processing error: $e');
+          _sendError(webSocket, 'Message processing error: $e');
         }
       },
       onError: (error) {
-        _logger.warning('Ошибка WebSocket: $error');
+        _logger.warning('WebSocket error: $error');
         if (userId != null) {
           _userManager.disconnectUser(userId!);
         }
       },
       onDone: () {
-        _logger.info('WebSocket соединение закрыто');
+        _logger.info('WebSocket connection closed');
         if (userId != null) {
           _userManager.disconnectUser(userId!);
         }
@@ -68,7 +68,7 @@ class WebSocketHandler {
     );
   }
 
-  /// Обрабатывает входящее сообщение
+  /// Handles an incoming message
   Future<void> _handleMessage(
     WebSocketChannel webSocket,
     Map<String, dynamic> message,
@@ -89,7 +89,7 @@ class WebSocketHandler {
         if (currentUserId != null) {
           await _handleSendMessage(webSocket, message, currentUserId);
         } else {
-          _sendError(webSocket, 'Необходима аутентификация');
+          _sendError(webSocket, 'Authentication required');
         }
         break;
         
@@ -97,7 +97,7 @@ class WebSocketHandler {
         if (currentUserId != null) {
           await _handleGetHistory(webSocket, message, currentUserId);
         } else {
-          _sendError(webSocket, 'Необходима аутентификация');
+          _sendError(webSocket, 'Authentication required');
         }
         break;
         
@@ -105,7 +105,7 @@ class WebSocketHandler {
         if (currentUserId != null) {
           await _handleMarkRead(webSocket, message, currentUserId);
         } else {
-          _sendError(webSocket, 'Необходима аутентификация');
+          _sendError(webSocket, 'Authentication required');
         }
         break;
         
@@ -113,7 +113,7 @@ class WebSocketHandler {
         if (currentUserId != null) {
           await _handleGetUsers(webSocket, message, currentUserId);
         } else {
-          _sendError(webSocket, 'Необходима аутентификация');
+          _sendError(webSocket, 'Authentication required');
         }
         break;
         
@@ -121,7 +121,7 @@ class WebSocketHandler {
         if (currentUserId != null) {
           await _handleAddToChat(webSocket, message, currentUserId);
         } else {
-          _sendError(webSocket, 'Необходима аутентификация');
+          _sendError(webSocket, 'Authentication required');
         }
         break;
         
@@ -130,11 +130,11 @@ class WebSocketHandler {
         break;
         
       default:
-        _sendError(webSocket, 'Неизвестный тип сообщения: $type');
+        _sendError(webSocket, 'Unknown message type: $type');
     }
   }
 
-  /// Обрабатывает регистрацию пользователя
+  /// Handles user registration
   Future<void> _handleRegister(WebSocketChannel webSocket, Map<String, dynamic> message) async {
     try {
       final publicSigningKey = message['publicSigningKey'] as String?;
@@ -142,11 +142,11 @@ class WebSocketHandler {
       final nickname = message['nickname'] as String?;
       
       if (publicSigningKey == null || publicEncryptionKey == null) {
-        _sendError(webSocket, 'Отсутствуют обязательные поля');
+        _sendError(webSocket, 'Missing required fields');
         return;
       }
 
-      // Генерируем userId на основе публичного ключа подписи
+      // Generate userId based on the public signing key
       final userId = _generateUserIdFromPublicKey(publicSigningKey);
       
       final user = await _userManager.registerUser(
@@ -162,16 +162,16 @@ class WebSocketHandler {
           'user': user.toJson(),
         });
         
-        _logger.info('Пользователь зарегистрирован: ${user.id}');
+        _logger.info('User registered: ${user.id}');
       } else {
-        _sendError(webSocket, 'Ошибка регистрации: не удалось создать пользователя');
+        _sendError(webSocket, 'Registration error: could not create user');
       }
     } catch (e) {
-      _sendError(webSocket, 'Ошибка регистрации: $e');
+      _sendError(webSocket, 'Registration error: $e');
     }
   }
 
-  /// Обрабатывает аутентификацию пользователя
+  /// Handles user authentication
   Future<void> _handleAuth(WebSocketChannel webSocket, Map<String, dynamic> message) async {
     try {
       final userId = message['userId'] as String?;
@@ -179,7 +179,7 @@ class WebSocketHandler {
       final timestamp = message['timestamp'] as String?;
       
       if (userId == null || signature == null || timestamp == null) {
-        _sendError(webSocket, 'Отсутствуют обязательные поля для аутентификации');
+        _sendError(webSocket, 'Missing required fields for authentication');
         return;
       }
 
@@ -187,7 +187,7 @@ class WebSocketHandler {
       final success = user != null;
 
       if (success) {
-        // Подключаем пользователя к WebSocket (регистрируем сам канал)
+        // Connect the user to WebSocket (register the channel itself)
         _userManager.connectUser(userId, webSocket);
         
         _sendResponse(webSocket, 'auth_success', {
@@ -195,18 +195,18 @@ class WebSocketHandler {
           'success': true,
         });
         
-        // Эфемерный режим: оффлайн-доставка отключена
+        // Ephemeral mode: offline delivery is disabled
         
-        _logger.info('Пользователь аутентифицирован: $userId');
+        _logger.info('User authenticated: $userId');
       } else {
-        _sendError(webSocket, 'Ошибка аутентификации');
+        _sendError(webSocket, 'Authentication error');
       }
     } catch (e) {
-      _sendError(webSocket, 'Ошибка аутентификации: $e');
+      _sendError(webSocket, 'Authentication error: $e');
     }
   }
 
-  /// Обрабатывает отправку сообщения
+  /// Handles sending a message
   Future<void> _handleSendMessage(
     WebSocketChannel webSocket,
     Map<String, dynamic> message,
@@ -220,7 +220,7 @@ class WebSocketHandler {
       final metadata = message['metadata'] as Map<String, dynamic>?;
       
       if (receiverId == null || encryptedContent == null || signature == null) {
-        _sendError(webSocket, 'Отсутствуют обязательные поля для отправки сообщения');
+        _sendError(webSocket, 'Missing required fields for sending a message');
         return;
       }
 
@@ -240,13 +240,13 @@ class WebSocketHandler {
         'message': sentMessage.toJson(),
       });
       
-      _logger.info('Сообщение отправлено: ${sentMessage.id}');
+      _logger.info('Message sent: ${sentMessage.id}');
     } catch (e) {
-      _sendError(webSocket, 'Ошибка отправки сообщения: $e');
+      _sendError(webSocket, 'Message send error: $e');
     }
   }
 
-  /// Обрабатывает запрос истории сообщений
+  /// Handles a message history request
   Future<void> _handleGetHistory(
     WebSocketChannel webSocket,
     Map<String, dynamic> message,
@@ -258,7 +258,7 @@ class WebSocketHandler {
       final beforeStr = message['before'] as String?;
       
       if (otherUserId == null) {
-        _sendError(webSocket, 'Отсутствует ID собеседника');
+        _sendError(webSocket, 'Missing interlocutor ID');
         return;
       }
 
@@ -279,13 +279,13 @@ class WebSocketHandler {
         'otherUserId': otherUserId,
       });
       
-      _logger.info('История сообщений отправлена: $userId <-> $otherUserId');
+      _logger.info('Message history sent: $userId <-> $otherUserId');
     } catch (e) {
-      _sendError(webSocket, 'Ошибка получения истории: $e');
+      _sendError(webSocket, 'Error retrieving history: $e');
     }
   }
 
-  /// Обрабатывает пометку сообщения как прочитанного
+  /// Handles marking a message as read
   Future<void> _handleMarkRead(
     WebSocketChannel webSocket,
     Map<String, dynamic> message,
@@ -295,7 +295,7 @@ class WebSocketHandler {
       final messageId = message['messageId'] as String?;
       
       if (messageId == null) {
-        _sendError(webSocket, 'Отсутствует ID сообщения');
+        _sendError(webSocket, 'Missing message ID');
         return;
       }
 
@@ -307,14 +307,14 @@ class WebSocketHandler {
       });
       
       if (success) {
-        _logger.info('Сообщение помечено как прочитанное: $messageId');
+        _logger.info('Message marked as read: $messageId');
       }
     } catch (e) {
-      _sendError(webSocket, 'Ошибка пометки сообщения: $e');
+      _sendError(webSocket, 'Error marking message: $e');
     }
   }
 
-  /// Обрабатывает запрос списка пользователей
+  /// Handles a users list request
   Future<void> _handleGetUsers(
     WebSocketChannel webSocket,
     Map<String, dynamic> message,
@@ -324,7 +324,7 @@ class WebSocketHandler {
       final onlineUsers = _userManager.getOnlineUsers();
       
       final users = onlineUsers
-          .where((user) => user.id != userId) // Исключаем текущего пользователя
+          .where((user) => user.id != userId) // Exclude current user
           .map((user) => user.toJson())
           .toList();
       
@@ -332,13 +332,13 @@ class WebSocketHandler {
         'users': users,
       });
       
-      _logger.info('Список пользователей отправлен: $userId');
+      _logger.info('Users list sent: $userId');
     } catch (e) {
-      _sendError(webSocket, 'Ошибка получения списка пользователей: $e');
+      _sendError(webSocket, 'Error retrieving users list: $e');
     }
   }
 
-  /// Отправляет ответ клиенту
+  /// Sends a response to the client
   void _sendResponse(WebSocketChannel webSocket, String type, Map<String, dynamic> data) {
     final response = {
       'type': type,
@@ -349,33 +349,33 @@ class WebSocketHandler {
     try {
       webSocket.sink.add(jsonEncode(response));
     } catch (e) {
-      _logger.warning('Ошибка отправки ответа: $e');
+      _logger.warning('Error sending response: $e');
     }
   }
 
-  /// Обрабатывает добавление пользователя в чат
+  /// Handles adding a user to a chat
   Future<void> _handleAddToChat(WebSocketChannel webSocket, Map<String, dynamic> message, String currentUserId) async {
     try {
       final targetUserId = message['target_user_id'] as String?;
       
       if (targetUserId == null) {
-        _sendError(webSocket, 'Не указан ID пользователя для добавления в чат');
+        _sendError(webSocket, 'User ID to add to chat not provided');
         return;
       }
       
       if (targetUserId == currentUserId) {
-        _sendError(webSocket, 'Нельзя добавить себя в чат');
+        _sendError(webSocket, 'Cannot add yourself to chat');
         return;
       }
       
-      // Проверяем, существует ли целевой пользователь
+      // Check if the target user exists
       final targetUser = _userManager.getUser(targetUserId);
       if (targetUser == null) {
-        _sendError(webSocket, 'Пользователь не найден');
+        _sendError(webSocket, 'User not found');
         return;
       }
       
-      // Отправляем уведомление целевому пользователю о добавлении в чат
+      // Notify the target user about being added to a chat
       if (_userManager.isUserOnline(targetUserId)) {
         await _userManager.sendToUser(targetUserId, {
           'type': 'chat_added',
@@ -385,7 +385,7 @@ class WebSocketHandler {
         });
       }
       
-      // Отправляем информацию о целевом пользователе инициатору
+      // Send target user's info back to the initiator
       final initiatorInfo = {
         'id': targetUserId,
         'nickname': targetUser.nickname ?? targetUserId,
@@ -393,24 +393,24 @@ class WebSocketHandler {
         'lastSeen': targetUser.lastSeen?.toIso8601String() ?? DateTime.now().toIso8601String(),
       };
       
-      // Подтверждаем инициатору, что пользователь добавлен
+      // Confirm to initiator that the user was added
       _sendResponse(webSocket, 'add_to_chat_success', {
         'target_user': initiatorInfo,
         'timestamp': DateTime.now().toIso8601String(),
       });
       
     } catch (e) {
-      print('Ошибка при добавлении пользователя в чат: $e');
-      _sendError(webSocket, 'Ошибка при добавлении пользователя в чат');
+      print('Error adding user to chat: $e');
+      _sendError(webSocket, 'Error adding user to chat');
     }
   }
 
-  /// Отправляет ошибку клиенту
+  /// Sends an error to the client
   void _sendError(WebSocketChannel webSocket, String error) {
     _sendResponse(webSocket, 'error', {'message': error});
   }
 
-  /// Парсит тип сообщения из строки
+  /// Parses message type from string
   MessageType _parseMessageType(String? typeStr) {
     switch (typeStr?.toLowerCase()) {
       case 'text':
@@ -424,9 +424,9 @@ class WebSocketHandler {
     }
   }
   
-  /// Генерирует userId на основе публичного ключа подписи
+  /// Generates a userId based on the public signing key
   String _generateUserIdFromPublicKey(String publicKey) {
-    // Используем первые 16 символов хеша публичного ключа как userId
+    // Use the first 16 characters of the public key hash as userId
     final bytes = utf8.encode(publicKey);
     final digest = sha256.convert(bytes);
     return digest.toString().substring(0, 16).toUpperCase();

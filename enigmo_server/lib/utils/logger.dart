@@ -1,6 +1,6 @@
-/// Простой логгер для сервера
+/// Simple logger for the server
 class Logger {
-  // Экземплярные методы
+  // Instance methods
   void info(String message) {
     print('INFO: $message');
   }
@@ -17,7 +17,7 @@ class Logger {
     print('WARNING: $message');
   }
 
-  // Статические методы для обратной совместимости
+  // Static methods for backward compatibility
   static void logInfo(String message) {
     print('INFO: $message');
   }

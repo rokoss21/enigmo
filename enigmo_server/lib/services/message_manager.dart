@@ -15,7 +15,7 @@ class MessageManager {
   final Completer<void> _initCompleter = Completer<void>();
   final Random _random = Random();
   
-  // Простая реализация мьютекса для критических секций
+  // Simple mutex implementation for critical sections
   bool _isLocked = false;
   final List<Completer<void>> _lockQueue = [];
 
@@ -23,7 +23,7 @@ class MessageManager {
     _initCompleter.complete();
   }
 
-  // Простая реализация мьютекса
+  // Simple mutex implementation
   Future<void> _lock() async {
     if (_isLocked) {
       final completer = Completer<void>();
@@ -63,19 +63,19 @@ class MessageManager {
         metadata: metadata,
       );
 
-      // Сохраняем глобально и по пользователям
+      // Save globally and per user
       _messages.add(message);
       _addToUserHistory(senderId, message);
       _addToUserHistory(receiverId, message);
 
-      // Обновляем кеш диалога
+      // Update conversation cache
       final key = _getCacheKey(senderId, receiverId);
       _conversationCache.putIfAbsent(key, () => []);
       _conversationCache[key]!.add(message);
 
-      // Пытаемся доставить
+      // Try to deliver
       await _deliverMessage(message);
-      print('DEBUG MessageManager.sendMessage: Отправка завершена ${message.id}');
+      print('DEBUG MessageManager.sendMessage: Sending completed ${message.id}');
       return message;
     } finally {
       _unlock();
@@ -83,16 +83,16 @@ class MessageManager {
   }
 
   Future<void> _deliverMessage(ServerMessage message) async {
-    print('DEBUG MessageManager._deliverMessage: Попытка доставки сообщения ${message.id}');
+    print('DEBUG MessageManager._deliverMessage: Attempting to deliver message ${message.id}');
     
     final receiver = _userManager.getUser(message.receiverId);
     if (receiver == null) {
-      print('DEBUG MessageManager._deliverMessage: Получатель ${message.receiverId} не найден');
+      print('DEBUG MessageManager._deliverMessage: Receiver ${message.receiverId} not found');
       return;
     }
 
     final isOnline = _userManager.isUserOnline(message.receiverId);
-    print('DEBUG MessageManager._deliverMessage: Получатель ${message.receiverId} в сети: $isOnline');
+    print('DEBUG MessageManager._deliverMessage: Receiver ${message.receiverId} online: $isOnline');
 
     if (isOnline) {
       try {
@@ -102,16 +102,16 @@ class MessageManager {
         });
 
         if (success) {
-          print('DEBUG MessageManager._deliverMessage: Сообщение ${message.id} успешно доставлено');
+          print('DEBUG MessageManager._deliverMessage: Message ${message.id} delivered successfully');
           _updateMessageStatus(message.id, DeliveryStatus.delivered);
         } else {
-          print('DEBUG MessageManager._deliverMessage: Ошибка доставки сообщения ${message.id}, пропускаем (эфемерный режим)');
+          print('DEBUG MessageManager._deliverMessage: Delivery error for message ${message.id}, skipping (ephemeral mode)');
         }
       } catch (e) {
-        print('DEBUG MessageManager._deliverMessage: Ошибка при доставке сообщения ${message.id}: $e');
+        print('DEBUG MessageManager._deliverMessage: Error delivering message ${message.id}: $e');
       }
     } else {
-      print('DEBUG MessageManager._deliverMessage: Получатель оффлайн, сообщение сохранено для истории');
+      print('DEBUG MessageManager._deliverMessage: Receiver offline, message kept for history');
       _addToOfflineQueue(message.receiverId, message);
     }
   }
@@ -127,7 +127,7 @@ class MessageManager {
   }
 
   Future<List<ServerMessage>> getMessageHistory(String userId1, String userId2, {int limit = 50, DateTime? before}) async {
-    // Используем кеш беседы, если есть
+    // Use conversation cache if available
     final key = _getCacheKey(userId1, userId2);
     List<ServerMessage> list;
     if (_conversationCache.containsKey(key)) {
@@ -141,15 +141,15 @@ class MessageManager {
       _conversationCache[key] = List.of(list);
     }
 
-    // Фильтрация по времени (сообщения строго до before)
+    // Filter by time (messages strictly before 'before')
     if (before != null) {
       list = list.where((m) => m.timestamp.isBefore(before)).toList();
     }
 
-    // Сортируем по времени по возрастанию
+    // Sort by ascending timestamp
     list.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-    // Применяем лимит: берем последние limit элементов, сохраняя порядок
+    // Apply limit: take last 'limit' items, preserving order
     if (list.length > limit) {
       list = list.sublist(list.length - limit);
     }
@@ -163,7 +163,7 @@ class MessageManager {
 
   Future<List<ServerMessage>> getUserMessages(String userId) async {
     final list = _messages.where((m) => m.senderId == userId || m.receiverId == userId).toList();
-    // Новые первыми
+    // Newest first
     list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     return list;
   }
@@ -175,7 +175,7 @@ class MessageManager {
     }
     final msg = _messages[idx];
     if (msg.receiverId != userId) {
-      // Только получатель может пометить как прочитанное
+      // Only the receiver can mark as read
       return false;
     }
     _messages[idx] = msg.copyWith(status: DeliveryStatus.read);
@@ -184,7 +184,7 @@ class MessageManager {
   }
 
   Future<void> deliverOfflineMessages(String userId) async {
-    // Эфемерный режим: оффлайн доставки отключены
+    // Ephemeral mode: offline deliveries are disabled
     return;
   }
 
@@ -202,7 +202,7 @@ class MessageManager {
     return '${timestamp}_${randomSuffix}';
   }
 
-  /// Получить статистику сообщений
+  /// Get message statistics
   Map<String, dynamic> getMessageStats() {
     return {
       'total': _messages.length,

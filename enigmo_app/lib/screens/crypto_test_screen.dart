@@ -32,25 +32,25 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
   Future<void> _initializeKeys() async {
     setState(() {
       _isLoading = true;
-      _statusMessage = 'Инициализация ключей...';
+      _statusMessage = 'Initializing keys...';
     });
     
     try {
-      // Загружаем или генерируем ключи
+      // Load or generate keys
       final hasKeys = await KeyManager.hasUserKeys();
       if (!hasKeys) {
         await KeyManager.generateUserKeys();
         setState(() {
-          _statusMessage = 'Новые ключи сгенерированы';
+          _statusMessage = 'New keys generated';
         });
       } else {
         await KeyManager.loadUserKeys();
         setState(() {
-          _statusMessage = 'Ключи загружены';
+          _statusMessage = 'Keys loaded';
         });
       }
       
-      // Получаем информацию о пользователе
+      // Get user information
       _userId = await KeyManager.getUserId();
       
       final encryptionKey = await KeyManager.getEncryptionPublicKey();
@@ -60,11 +60,11 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
       _signingPublicKey = await KeyManager.publicKeyToString(signingKey);
       
       setState(() {
-        _statusMessage = 'Готов к работе';
+        _statusMessage = 'Ready';
       });
     } catch (e) {
       setState(() {
-        _statusMessage = 'Ошибка: $e';
+        _statusMessage = 'Error: $e';
       });
     } finally {
       setState(() {
@@ -75,38 +75,38 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
   
   Future<void> _encryptMessage() async {
     if (_messageController.text.isEmpty || _recipientKeyController.text.isEmpty) {
-      _showSnackBar('Введите сообщение и ключ получателя');
+      _showSnackBar('Enter a message and recipient key');
       return;
     }
     
     setState(() {
       _isLoading = true;
-      _statusMessage = 'Шифрование...';
+      _statusMessage = 'Encrypting...';
     });
     
     try {
-      // Конвертируем строку ключа получателя в PublicKey
+      // Convert recipient key string into a PublicKey
       final recipientKey = await KeyManager.publicKeyFromString(
         _recipientKeyController.text,
         isEncryption: true,
       );
       
-      // Шифруем сообщение
+      // Encrypt the message
       final encryptedMessage = await CryptoEngine.encryptMessage(
         _messageController.text,
         recipientKey,
       );
       
-      // Конвертируем в JSON для отображения
+      // Convert to JSON for display
       final encryptedJson = encryptedMessage.toJson();
       _encryptedController.text = encryptedJson.toString();
       
       setState(() {
-        _statusMessage = 'Сообщение зашифровано';
+        _statusMessage = 'Message encrypted';
       });
     } catch (e) {
       setState(() {
-        _statusMessage = 'Ошибка шифрования: $e';
+        _statusMessage = 'Encryption error: $e';
       });
     } finally {
       setState(() {
@@ -117,34 +117,34 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
   
   Future<void> _decryptMessage() async {
     if (_encryptedController.text.isEmpty) {
-      _showSnackBar('Введите зашифрованное сообщение');
+      _showSnackBar('Enter an encrypted message');
       return;
     }
     
     setState(() {
       _isLoading = true;
-      _statusMessage = 'Расшифровка...';
+      _statusMessage = 'Decrypting...';
     });
     
     try {
-      // Для демонстрации используем наши собственные ключи как ключи отправителя
+      // For demo purposes, use our own keys as the sender's keys
       final senderEncryptionKey = await KeyManager.getEncryptionPublicKey();
       final senderSigningKey = await KeyManager.getSigningPublicKey();
       
-      // Парсим зашифрованное сообщение (упрощенный парсинг)
+      // Parse the encrypted message (simplified parsing)
       final encryptedText = _encryptedController.text;
       
-      // В реальном приложении здесь был бы правильный JSON парсинг
-      // Для демонстрации создаем фиктивное зашифрованное сообщение
-      _showSnackBar('Для полной демонстрации нужен второй пользователь');
+      // In a real app there would be proper JSON parsing here
+      // For demonstration, show a placeholder
+      _showSnackBar('A second user is required for a full demo');
       
       setState(() {
-        _statusMessage = 'Для расшифровки нужны ключи отправителя';
-        _decryptedController.text = 'Демо: расшифровка требует ключи отправителя';
+        _statusMessage = 'Sender keys are required for decryption';
+        _decryptedController.text = 'Demo: decryption requires sender keys';
       });
     } catch (e) {
       setState(() {
-        _statusMessage = 'Ошибка расшифровки: $e';
+        _statusMessage = 'Decryption error: $e';
       });
     } finally {
       setState(() {
@@ -156,7 +156,7 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
   Future<void> _generateNewKeys() async {
     setState(() {
       _isLoading = true;
-      _statusMessage = 'Генерация новых ключей...';
+      _statusMessage = 'Generating new keys...';
     });
     
     try {
@@ -164,14 +164,14 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
       await _initializeKeys();
     } catch (e) {
       setState(() {
-        _statusMessage = 'Ошибка генерации ключей: $e';
+        _statusMessage = 'Key generation error: $e';
       });
     }
   }
   
   void _copyToClipboard(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
-    _showSnackBar('$label скопирован в буфер обмена');
+    _showSnackBar('$label copied to clipboard');
   }
   
   void _showSnackBar(String message) {
@@ -184,7 +184,7 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Тест криптографии'),
+        title: const Text('Cryptography Test'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: _isLoading
@@ -194,7 +194,7 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Информация о пользователе
+                  // User information
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -202,17 +202,17 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Информация о пользователе',
+                            'User information',
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           const SizedBox(height: 8),
-                          Text('ID пользователя: $_userId'),
+                          Text('User ID: $_userId'),
                           const SizedBox(height: 8),
                           Row(
                             children: [
                               Expanded(
                                 child: Text(
-                                  'Ключ шифрования: ${_encryptionPublicKey.substring(0, 20)}...',
+                                  'Encryption key: ${_encryptionPublicKey.substring(0, 20)}...',
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -220,7 +220,7 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
                                 icon: const Icon(Icons.copy),
                                 onPressed: () => _copyToClipboard(
                                   _encryptionPublicKey,
-                                  'Ключ шифрования',
+                                  'Encryption key',
                                 ),
                               ),
                             ],
@@ -229,7 +229,7 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  'Ключ подписи: ${_signingPublicKey.substring(0, 20)}...',
+                                  'Signing key: ${_signingPublicKey.substring(0, 20)}...',
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -237,7 +237,7 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
                                 icon: const Icon(Icons.copy),
                                 onPressed: () => _copyToClipboard(
                                   _signingPublicKey,
-                                  'Ключ подписи',
+                                  'Signing key',
                                 ),
                               ),
                             ],
@@ -248,7 +248,7 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Шифрование
+                  // Encryption
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -256,14 +256,14 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Шифрование сообщения',
+                            'Message encryption',
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           const SizedBox(height: 16),
                           TextField(
                             controller: _messageController,
                             decoration: const InputDecoration(
-                              labelText: 'Сообщение для шифрования',
+                              labelText: 'Message to encrypt',
                               border: OutlineInputBorder(),
                             ),
                             maxLines: 3,
@@ -272,21 +272,21 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
                           TextField(
                             controller: _recipientKeyController,
                             decoration: const InputDecoration(
-                              labelText: 'Публичный ключ получателя (для шифрования)',
+                              labelText: 'Recipient public key (for encryption)',
                               border: OutlineInputBorder(),
-                              hintText: 'Вставьте ключ шифрования получателя',
+                              hintText: "Paste recipient's encryption key",
                             ),
                           ),
                           const SizedBox(height: 16),
                           ElevatedButton(
                             onPressed: _encryptMessage,
-                            child: const Text('Зашифровать'),
+                            child: const Text('Encrypt'),
                           ),
                           const SizedBox(height: 16),
                           TextField(
                             controller: _encryptedController,
                             decoration: const InputDecoration(
-                              labelText: 'Зашифрованное сообщение',
+                              labelText: 'Encrypted message',
                               border: OutlineInputBorder(),
                             ),
                             maxLines: 5,
@@ -298,7 +298,7 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Расшифровка
+                  // Decryption
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -306,19 +306,19 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Расшифровка сообщения',
+                            'Message decryption',
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           const SizedBox(height: 16),
                           ElevatedButton(
                             onPressed: _decryptMessage,
-                            child: const Text('Расшифровать'),
+                            child: const Text('Decrypt'),
                           ),
                           const SizedBox(height: 16),
                           TextField(
                             controller: _decryptedController,
                             decoration: const InputDecoration(
-                              labelText: 'Расшифрованное сообщение',
+                              labelText: 'Decrypted message',
                               border: OutlineInputBorder(),
                             ),
                             maxLines: 3,
@@ -330,7 +330,7 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Статус и управление
+                  // Status and controls
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -338,7 +338,7 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Статус: $_statusMessage',
+                            'Status: $_statusMessage',
                             style: Theme.of(context).textTheme.bodyLarge,
                           ),
                           const SizedBox(height: 16),
@@ -347,7 +347,7 @@ class _CryptoTestScreenState extends State<CryptoTestScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.orange,
                             ),
-                            child: const Text('Сгенерировать новые ключи'),
+                            child: const Text('Generate new keys'),
                           ),
                         ],
                       ),

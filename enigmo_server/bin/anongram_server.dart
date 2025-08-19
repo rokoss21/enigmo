@@ -12,7 +12,7 @@ import 'package:enigmo_server/services/message_manager.dart';
 import 'package:enigmo_server/services/websocket_handler.dart';
 
 void main(List<String> arguments) async {
-  // Настройка логирования
+  // Configure logging
   Logger.root.level = Level.ALL;
   Logger.root.onRecord.listen((record) {
     print('${record.level.name}: ${record.time}: ${record.message}');
@@ -26,17 +26,17 @@ void main(List<String> arguments) async {
 
   final logger = Logger('AnogramServer');
 
-  // Парсинг аргументов командной строки
+  // Parse command-line arguments
   final parser = ArgParser()
-    ..addOption('port', abbr: 'p', defaultsTo: '8080', help: 'Порт сервера')
-    ..addOption('host', abbr: 'h', defaultsTo: 'localhost', help: 'Хост сервера')
-    ..addFlag('help', negatable: false, help: 'Показать справку');
+    ..addOption('port', abbr: 'p', defaultsTo: '8080', help: 'Server port')
+    ..addOption('host', abbr: 'h', defaultsTo: 'localhost', help: 'Server host')
+    ..addFlag('help', negatable: false, help: 'Show help');
 
   final argResults = parser.parse(arguments);
 
   if (argResults['help'] as bool) {
     print('Anongram Bootstrap Server');
-    print('Использование: dart run bin/anongram_server.dart [опции]');
+    print('Usage: dart run bin/anongram_server.dart [options]');
     print(parser.usage);
     return;
   }
@@ -44,12 +44,12 @@ void main(List<String> arguments) async {
   final port = int.tryParse(argResults['port'] as String) ?? 8080;
   final host = argResults['host'] as String;
 
-  // Инициализация сервисов
+  // Initialize services
   final userManager = UserManager();
   final messageManager = MessageManager(userManager);
   final webSocketHandler = WebSocketHandler(userManager, messageManager);
 
-  // Настройка маршрутов
+  // Configure routes
   final router = Router();
 
   // WebSocket endpoint
@@ -80,34 +80,34 @@ void main(List<String> arguments) async {
     );
   });
 
-  // Обработчик для неизвестных маршрутов
+  // Handler for unknown routes
   router.all('/<ignored|.*>', (Request request) {
-    return Response.notFound('Маршрут не найден: ${request.url.path}');
+    return Response.notFound('Route not found: ${request.url.path}');
   });
 
-  // Middleware для CORS и логирования
+  // Middleware for CORS and logging
   final handler = Pipeline()
       .addMiddleware(corsHeaders())
       .addMiddleware(logRequests())
       .addHandler(router);
 
-  // Запуск сервера
+  // Start server
   try {
     final server = await serve(handler, host, port);
-    logger.info('Anongram Bootstrap Server запущен на http://${server.address.host}:${server.port}');
+    logger.info('Anongram Bootstrap Server started at http://${server.address.host}:${server.port}');
     logger.info('WebSocket endpoint: ws://${server.address.host}:${server.port}/ws');
     logger.info('Health check: http://${server.address.host}:${server.port}/api/health');
     logger.info('Statistics: http://${server.address.host}:${server.port}/api/stats');
     
-    // Обработка сигналов завершения
+    // Handle termination signals
     ProcessSignal.sigint.watch().listen((signal) {
-      logger.info('Получен сигнал завершения, останавливаем сервер...');
+      logger.info('Termination signal received, stopping server...');
       server.close(force: true);
       exit(0);
     });
     
   } catch (e, stackTrace) {
-    logger.severe('Ошибка запуска сервера: $e', e, stackTrace);
+    logger.severe('Server startup error: $e', e, stackTrace);
     exit(1);
   }
 }

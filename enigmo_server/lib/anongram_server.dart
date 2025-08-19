@@ -12,7 +12,7 @@ import 'services/message_manager.dart';
 import 'services/websocket_handler.dart';
 import 'utils/logger.dart' as custom_logger;
 
-/// Основной класс сервера Anongram
+/// Main class for the Anongram server
 class AnogramServer {
   final Logger _logger = Logger('AnogramServer');
   late final UserManager _userManager;
@@ -20,18 +20,18 @@ class AnogramServer {
   late final WebSocketHandler _webSocketHandler;
   late final HttpServer _server;
   
-  /// Инициализирует сервер
+  /// Initializes the server
   Future<void> initialize({
     String host = 'localhost',
     int port = 8080,
   }) async {
     try {
-      // Инициализация сервисов
+      // Initialize services
       _userManager = UserManager();
       _messageManager = MessageManager(_userManager);
       _webSocketHandler = WebSocketHandler(_userManager, _messageManager);
 
-      // Настройка маршрутов
+      // Configure routes
       final router = Router();
 
       // WebSocket endpoint
@@ -41,30 +41,30 @@ class AnogramServer {
       router.get('/api/health', _handleHealthCheck);
       router.get('/api/stats', _handleStats);
 
-      // Обработчик для неизвестных маршрутов
+      // Handler for unknown routes
       router.all('/<ignored|.*>', _handleNotFound);
 
-      // Middleware для CORS и логирования
+      // Middleware for CORS and logging
       final handler = Pipeline()
           .addMiddleware(corsHeaders())
           .addMiddleware(logRequests())
           .addHandler(router);
 
-      // Запуск сервера
+      // Start server
       _server = await serve(handler, host, port);
       
-      _logger.info('Anongram Bootstrap Server запущен на http://${_server.address.host}:${_server.port}');
+      _logger.info('Anongram Bootstrap Server started at http://${_server.address.host}:${_server.port}');
       _logger.info('WebSocket endpoint: ws://${_server.address.host}:${_server.port}/ws');
       _logger.info('Health check: http://${_server.address.host}:${_server.port}/api/health');
       _logger.info('Statistics: http://${_server.address.host}:${_server.port}/api/stats');
       
     } catch (e, stackTrace) {
-      _logger.severe('Ошибка инициализации сервера: $e', e, stackTrace);
+      _logger.severe('Server initialization error: $e', e, stackTrace);
       rethrow;
     }
   }
 
-  /// Обработчик проверки состояния сервера
+  /// Health check handler
   Response _handleHealthCheck(Request request) {
     final healthData = {
       'status': 'ok',
@@ -79,7 +79,7 @@ class AnogramServer {
     );
   }
 
-  /// Обработчик статистики сервера
+  /// Server statistics handler
   Response _handleStats(Request request) {
     try {
       final userStats = _userManager.getUserStats();
@@ -100,36 +100,36 @@ class AnogramServer {
         headers: {'Content-Type': 'application/json'},
       );
     } catch (e) {
-      _logger.warning('Ошибка получения статистики: $e');
+      _logger.warning('Failed to get statistics: $e');
       return Response.internalServerError(
-        body: jsonEncode({'error': 'Ошибка получения статистики'}),
+        body: jsonEncode({'error': 'Failed to get statistics'}),
         headers: {'Content-Type': 'application/json'},
       );
     }
   }
 
-  /// Обработчик для неизвестных маршрутов
+  /// Handler for unknown routes
   Response _handleNotFound(Request request) {
     return Response.notFound(
-      jsonEncode({'error': 'Маршрут не найден: ${request.url.path}'}),
+      jsonEncode({'error': 'Route not found: ${request.url.path}'}),
       headers: {'Content-Type': 'application/json'},
     );
   }
 
-  /// Останавливает сервер
+  /// Stops the server
   Future<void> stop({bool force = false}) async {
     try {
-      _logger.info('Остановка сервера...');
+      _logger.info('Stopping server...');
       await _server.close(force: force);
-      _logger.info('Сервер остановлен');
+      _logger.info('Server stopped');
     } catch (e) {
-      _logger.severe('Ошибка остановки сервера: $e');
+      _logger.severe('Server stop error: $e');
     }
   }
 
-  /// Возвращает адрес сервера
+  /// Returns the server address
   InternetAddress get address => _server.address;
   
-  /// Возвращает порт сервера
+  /// Returns the server port
   int get port => _server.port;
 }

@@ -12,7 +12,7 @@ void main() {
       userManager = UserManager();
     });
 
-    test('должен успешно зарегистрировать нового пользователя', () async {
+    test('should successfully register a new user', () async {
       final user = await userManager.registerUser(
         id: 'test_user_1',
         publicSigningKey: 'test_signing_key',
@@ -28,8 +28,8 @@ void main() {
       expect(user.isOnline, isFalse);
     });
 
-    test('не должен регистрировать пользователя с существующим ID', () async {
-      // Регистрируем первого пользователя
+    test('should not register a user with an existing ID', () async {
+      // Register the first user
       await userManager.registerUser(
         id: 'duplicate_user',
         publicSigningKey: 'key1',
@@ -37,7 +37,7 @@ void main() {
         nickname: 'User 1',
       );
 
-      // Пытаемся зарегистрировать пользователя с тем же ID
+      // Try to register a user with the same ID
       final duplicateUser = await userManager.registerUser(
         id: 'duplicate_user',
         publicSigningKey: 'key3',
@@ -48,8 +48,8 @@ void main() {
       expect(duplicateUser, isNull);
     });
 
-    test('должен успешно аутентифицировать существующего пользователя', () async {
-      // Регистрируем пользователя
+    test('should successfully authenticate an existing user', () async {
+      // Register a user
       await userManager.registerUser(
         id: 'auth_test_user',
         publicSigningKey: 'test_key',
@@ -57,7 +57,7 @@ void main() {
         nickname: 'Auth User',
       );
 
-      // Аутентифицируем пользователя
+      // Authenticate the user
       final authenticatedUser = await userManager.authenticateUser('auth_test_user');
 
       expect(authenticatedUser, isNotNull);
@@ -65,13 +65,13 @@ void main() {
       expect(authenticatedUser.isOnline, isTrue);
     });
 
-    test('не должен аутентифицировать несуществующего пользователя', () async {
+    test('should not authenticate a non-existent user', () async {
       final authenticatedUser = await userManager.authenticateUser('nonexistent_user');
       expect(authenticatedUser, isNull);
     });
 
-    test('должен получить пользователя по ID', () async {
-      // Регистрируем пользователя
+    test('should get a user by ID', () async {
+      // Register a user
       await userManager.registerUser(
         id: 'get_user_test',
         publicSigningKey: 'test_key',
@@ -79,18 +79,18 @@ void main() {
         nickname: 'Get User Test',
       );
 
-      // Получаем пользователя
+      // Get the user
       final user = userManager.getUser('get_user_test');
       expect(user, isNotNull);
       expect(user!.id, equals('get_user_test'));
 
-      // Пытаемся получить несуществующего пользователя
+      // Try to get a non-existent user
       final nonexistentUser = userManager.getUser('nonexistent');
       expect(nonexistentUser, isNull);
     });
 
-    test('должен получить список всех пользователей', () async {
-      // Регистрируем несколько пользователей
+    test('should get a list of all users', () async {
+      // Register multiple users
       await userManager.registerUser(
         id: 'user1',
         publicSigningKey: 'key1',
@@ -113,8 +113,8 @@ void main() {
       expect(userIds, contains('user2'));
     });
 
-    test('должен получить статистику пользователей', () async {
-      // Регистрируем пользователя
+    test('should get user statistics', () async {
+      // Register a user
       await userManager.registerUser(
         id: 'stats_user',
         publicSigningKey: 'key',
@@ -130,8 +130,8 @@ void main() {
       expect(stats['total'], greaterThanOrEqualTo(1));
     });
 
-    test('должен проверить статус онлайн пользователя', () async {
-      // Регистрируем пользователя
+    test('should check a user online status', () async {
+      // Register a user
       await userManager.registerUser(
         id: 'online_test_user',
         publicSigningKey: 'key',
@@ -139,18 +139,18 @@ void main() {
         nickname: 'Online Test',
       );
 
-      // Пользователь должен быть офлайн после регистрации
+      // The user should be offline after registration
       expect(userManager.isUserOnline('online_test_user'), isFalse);
 
-      // Аутентифицируем пользователя (делает его онлайн)
+      // Authenticate the user (marks them online)
       await userManager.authenticateUser('online_test_user');
       
-      // Пользователь все еще офлайн, пока не подключен WebSocket
+      // The user is still offline until WebSocket is connected
       expect(userManager.isUserOnline('online_test_user'), isFalse);
     });
 
-    test('должен получить список онлайн пользователей', () async {
-      // Регистрируем и аутентифицируем пользователя
+    test('should get a list of online users', () async {
+      // Register and authenticate a user
       await userManager.registerUser(
         id: 'online_user_1',
         publicSigningKey: 'key1',
@@ -163,7 +163,7 @@ void main() {
       final onlineUsers = userManager.getOnlineUsers();
       expect(onlineUsers, isA<List<User>>());
       
-      // Проверяем, что аутентифицированный пользователь помечен как онлайн
+      // Verify the authenticated user is marked as online
       final onlineUser = onlineUsers.firstWhere(
         (u) => u.id == 'online_user_1',
         orElse: () => throw StateError('User not found'),
@@ -171,8 +171,8 @@ void main() {
       expect(onlineUser.isOnline, isTrue);
     });
 
-    test('должен отключить пользователя', () async {
-      // Регистрируем и аутентифицируем пользователя
+    test('should disconnect a user', () async {
+      // Register and authenticate a user
       await userManager.registerUser(
         id: 'disconnect_user',
         publicSigningKey: 'key',
@@ -182,10 +182,10 @@ void main() {
       
       await userManager.authenticateUser('disconnect_user');
 
-      // Отключаем пользователя
+      // Disconnect the user
       userManager.disconnectUser('disconnect_user');
 
-      // Проверяем, что пользователь офлайн
+      // Verify the user is offline
       expect(userManager.isUserOnline('disconnect_user'), isFalse);
       
       final user = userManager.getUser('disconnect_user');

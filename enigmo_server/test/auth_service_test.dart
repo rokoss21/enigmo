@@ -13,7 +13,7 @@ void main() {
     late SimpleKeyPair testKeyPair;
 
     setUpAll(() async {
-      // Создаем тестовые ключи
+      // Create test keys
       final ed25519 = Ed25519();
       testKeyPair = await ed25519.newKeyPair();
       final publicKey = await testKeyPair.extractPublicKey();
@@ -33,8 +33,8 @@ void main() {
       authService = AuthService(userManager);
     });
 
-    test('должен успешно проверить валидную подпись', () async {
-      // Регистрируем тестового пользователя
+    test('should successfully verify a valid signature', () async {
+      // Register the test user
       await userManager.registerUser(
         id: testUser.id,
         publicSigningKey: testUser.publicSigningKey,
@@ -42,13 +42,13 @@ void main() {
         nickname: testUser.nickname,
       );
 
-      // Создаем подпись
+      // Create a signature
       final timestamp = DateTime.now().toIso8601String();
       final dataBytes = utf8.encode(timestamp);
       final signature = await Ed25519().sign(dataBytes, keyPair: testKeyPair);
       final signatureString = base64Encode(signature.bytes);
 
-      // Проверяем подпись
+      // Verify the signature
       final isValid = await authService.verifySignature(
         testUser.id,
         timestamp,
@@ -58,8 +58,8 @@ void main() {
       expect(isValid, isTrue);
     });
 
-    test('должен отклонить неверную подпись', () async {
-      // Регистрируем тестового пользователя
+    test('should reject an invalid signature', () async {
+      // Register the test user
       await userManager.registerUser(
         id: testUser.id,
         publicSigningKey: testUser.publicSigningKey,
@@ -70,7 +70,7 @@ void main() {
       final timestamp = DateTime.now().toIso8601String();
       final invalidSignature = 'invalid_signature';
 
-      // Проверяем неверную подпись
+      // Verify an invalid signature
       final isValid = await authService.verifySignature(
         testUser.id,
         timestamp,
@@ -80,8 +80,8 @@ void main() {
       expect(isValid, isFalse);
     });
 
-    test('должен отклонить аутентификацию с устаревшим timestamp', () async {
-      // Регистрируем тестового пользователя
+    test('should reject authentication with an outdated timestamp', () async {
+      // Register the test user
       await userManager.registerUser(
         id: testUser.id,
         publicSigningKey: testUser.publicSigningKey,
@@ -89,7 +89,7 @@ void main() {
         nickname: testUser.nickname,
       );
 
-      // Создаем устаревший timestamp (6 минут назад)
+      // Create an outdated timestamp (6 minutes ago)
       final oldTimestamp = DateTime.now()
           .subtract(const Duration(minutes: 6))
           .toIso8601String();
@@ -98,7 +98,7 @@ void main() {
       final signature = await Ed25519().sign(dataBytes, keyPair: testKeyPair);
       final signatureString = base64Encode(signature.bytes);
 
-      // Проверяем аутентификацию
+      // Check authentication
       final isAuthenticated = await authService.authenticateUser(
         testUser.id,
         signatureString,
@@ -108,8 +108,8 @@ void main() {
       expect(isAuthenticated, isFalse);
     });
 
-    test('должен успешно аутентифицировать пользователя с валидными данными', () async {
-      // Регистрируем тестового пользователя
+    test('should authenticate a user with valid data', () async {
+      // Register the test user
       await userManager.registerUser(
         id: testUser.id,
         publicSigningKey: testUser.publicSigningKey,
@@ -122,7 +122,7 @@ void main() {
       final signature = await Ed25519().sign(dataBytes, keyPair: testKeyPair);
       final signatureString = base64Encode(signature.bytes);
 
-      // Проверяем аутентификацию
+      // Check authentication
       final isAuthenticated = await authService.authenticateUser(
         testUser.id,
         signatureString,
@@ -132,13 +132,13 @@ void main() {
       expect(isAuthenticated, isTrue);
     });
 
-    test('должен отклонить аутентификацию несуществующего пользователя', () async {
+    test('should reject authentication for a non-existent user', () async {
       final timestamp = DateTime.now().toIso8601String();
       final dataBytes = utf8.encode(timestamp);
       final signature = await Ed25519().sign(dataBytes, keyPair: testKeyPair);
       final signatureString = base64Encode(signature.bytes);
 
-      // Проверяем аутентификацию несуществующего пользователя
+      // Check authentication for a non-existent user
       final isAuthenticated = await authService.authenticateUser(
         'nonexistent_user',
         signatureString,
@@ -148,8 +148,8 @@ void main() {
       expect(isAuthenticated, isFalse);
     });
 
-    test('должен проверить возможность аутентификации', () async {
-      // Регистрируем тестового пользователя
+    test('should check the ability to authenticate', () async {
+      // Register the test user
       await userManager.registerUser(
         id: testUser.id,
         publicSigningKey: testUser.publicSigningKey,
@@ -157,11 +157,11 @@ void main() {
         nickname: testUser.nickname,
       );
 
-      // Проверяем возможность аутентификации
+      // Check the ability to authenticate
       final canAuth = await authService.canAuthenticate(testUser.id);
       expect(canAuth, isTrue);
 
-      // Проверяем для несуществующего пользователя
+      // Check for a non-existent user
       final canAuthNonexistent = await authService.canAuthenticate('nonexistent');
       expect(canAuthNonexistent, isFalse);
     });

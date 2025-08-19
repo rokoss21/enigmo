@@ -22,15 +22,15 @@ void main() {
       webSocketHandler = WebSocketHandler(userManager, messageManager);
     });
 
-    group('Полный цикл регистрации и аутентификации', () {
-      test('должен зарегистрировать пользователя и успешно аутентифицировать', () async {
-        // Создаем тестовые ключи
+    group('Full registration and authentication flow', () {
+      test('should register a user and authenticate successfully', () async {
+        // Create test keys
         final ed25519 = Ed25519();
         final keyPair = await ed25519.newKeyPair();
         final publicKey = await keyPair.extractPublicKey();
         final publicKeyString = base64Encode(publicKey.bytes);
 
-        // Регистрируем пользователя
+        // Register user
         final user = await userManager.registerUser(
           id: 'integration_user_1',
           publicSigningKey: publicKeyString,
@@ -41,13 +41,13 @@ void main() {
         expect(user, isNotNull);
         expect(user!.id, equals('integration_user_1'));
 
-        // Создаем подпись для аутентификации
+        // Create signature for authentication
         final timestamp = DateTime.now().toIso8601String();
         final dataBytes = utf8.encode(timestamp);
         final signature = await ed25519.sign(dataBytes, keyPair: keyPair);
         final signatureString = base64Encode(signature.bytes);
 
-        // Аутентифицируем пользователя
+        // Authenticate user
         final isAuthenticated = await authService.authenticateUser(
           'integration_user_1',
           signatureString,
@@ -56,16 +56,16 @@ void main() {
 
         expect(isAuthenticated, isTrue);
 
-        // Проверяем, что пользователь помечен как аутентифицированный
+        // Verify the user is marked as authenticated
         final authenticatedUser = await userManager.authenticateUser('integration_user_1');
         expect(authenticatedUser, isNotNull);
         expect(authenticatedUser!.isOnline, isTrue);
       });
     });
 
-    group('Полный цикл обмена сообщениями', () {
-      test('должен отправить сообщение между двумя пользователями', () async {
-        // Регистрируем двух пользователей
+    group('Full messaging flow', () {
+      test('should send a message between two users', () async {
+        // Register two users
         await userManager.registerUser(
           id: 'sender_integration',
           publicSigningKey: 'sender_key',
@@ -80,11 +80,11 @@ void main() {
           nickname: 'Receiver',
         );
 
-        // Отправляем сообщение
+        // Send a message
         final message = await messageManager.sendMessage(
           senderId: 'sender_integration',
           receiverId: 'receiver_integration',
-          encryptedContent: 'Интеграционное тестовое сообщение',
+          encryptedContent: 'Integration test message',
           signature: 'test_signature',
           type: MessageType.text,
         );
@@ -92,9 +92,9 @@ void main() {
         expect(message, isNotNull);
         expect(message.senderId, equals('sender_integration'));
         expect(message.receiverId, equals('receiver_integration'));
-        expect(message.encryptedContent, equals('Интеграционное тестовое сообщение'));
+        expect(message.encryptedContent, equals('Integration test message'));
 
-        // Получаем историю сообщений
+        // Get message history
         final history = await messageManager.getMessageHistory(
           'sender_integration',
           'receiver_integration',
@@ -102,11 +102,11 @@ void main() {
 
         expect(history.length, equals(1));
         expect(history[0].id, equals(message.id));
-        expect(history[0].encryptedContent, equals('Интеграционное тестовое сообщение'));
+        expect(history[0].encryptedContent, equals('Integration test message'));
       });
 
-      test('должен обработать двустороннюю переписку', () async {
-        // Регистрируем пользователей
+      test('should process bidirectional conversation', () async {
+        // Register users
         await userManager.registerUser(
           id: 'user_a',
           publicSigningKey: 'key_a',
@@ -121,49 +121,49 @@ void main() {
           nickname: 'User B',
         );
 
-        // User A отправляет сообщение User B
+        // User A sends a message to User B
         final message1 = await messageManager.sendMessage(
           senderId: 'user_a',
           receiverId: 'user_b',
-          encryptedContent: 'Привет от A',
+          encryptedContent: 'Hello from A',
           signature: 'sig_a1',
         );
 
-        // User B отвечает User A
+        // User B replies to User A
         final message2 = await messageManager.sendMessage(
           senderId: 'user_b',
           receiverId: 'user_a',
-          encryptedContent: 'Привет от B',
+          encryptedContent: 'Hello from B',
           signature: 'sig_b1',
         );
 
-        // User A отправляет еще одно сообщение
+        // User A sends another message
         final message3 = await messageManager.sendMessage(
           senderId: 'user_a',
           receiverId: 'user_b',
-          encryptedContent: 'Как дела?',
+          encryptedContent: 'How are you?',
           signature: 'sig_a2',
         );
 
-        // Получаем историю для User A
+        // Get history for User A
         final historyA = await messageManager.getMessageHistory('user_a', 'user_b');
         expect(historyA.length, equals(3));
-        expect(historyA[0].encryptedContent, equals('Привет от A'));
-        expect(historyA[1].encryptedContent, equals('Привет от B'));
-        expect(historyA[2].encryptedContent, equals('Как дела?'));
+        expect(historyA[0].encryptedContent, equals('Hello from A'));
+        expect(historyA[1].encryptedContent, equals('Hello from B'));
+        expect(historyA[2].encryptedContent, equals('How are you?'));
 
-        // Получаем историю для User B (должна быть такой же)
+        // Get history for User B (should be the same)
         final historyB = await messageManager.getMessageHistory('user_b', 'user_a');
         expect(historyB.length, equals(3));
-        expect(historyB[0].encryptedContent, equals('Привет от A'));
-        expect(historyB[1].encryptedContent, equals('Привет от B'));
-        expect(historyB[2].encryptedContent, equals('Как дела?'));
+        expect(historyB[0].encryptedContent, equals('Hello from A'));
+        expect(historyB[1].encryptedContent, equals('Hello from B'));
+        expect(historyB[2].encryptedContent, equals('How are you?'));
       });
     });
 
-    group('Статус прочтения сообщений', () {
-      test('должен обработать полный цикл статуса сообщения', () async {
-        // Регистрируем пользователей
+    group('Message read status', () {
+      test('should handle full message status lifecycle', () async {
+        // Register users
         await userManager.registerUser(
           id: 'status_sender',
           publicSigningKey: 'status_sender_key',
@@ -178,18 +178,18 @@ void main() {
           nickname: 'Status Receiver',
         );
 
-        // Отправляем сообщение
+        // Send a message
         final message = await messageManager.sendMessage(
           senderId: 'status_sender',
           receiverId: 'status_receiver',
-          encryptedContent: 'Сообщение для проверки статуса',
+          encryptedContent: 'Message for status check',
           signature: 'status_sig',
         );
 
-        // Проверяем начальный статус
+        // Check initial status
         expect(message.status, equals(DeliveryStatus.sent));
 
-        // Помечаем как прочитанное получателем
+        // Mark as read by the receiver
         final readSuccess = await messageManager.markMessageAsRead(
           message.id,
           'status_receiver',
@@ -197,16 +197,16 @@ void main() {
 
         expect(readSuccess, isTrue);
 
-        // Проверяем статистику
+        // Check statistics
         final stats = messageManager.getMessageStats();
         expect(stats['total'], greaterThanOrEqualTo(1));
         expect(stats['read'], greaterThanOrEqualTo(1));
       });
     });
 
-    group('Управление пользователями онлайн', () {
-      test('должен корректно отслеживать статус пользователей', () async {
-        // Регистрируем пользователя
+    group('Online user management', () {
+      test('should correctly track user status', () async {
+        // Register a user
         await userManager.registerUser(
           id: 'online_test_user',
           publicSigningKey: 'online_key',
@@ -214,16 +214,16 @@ void main() {
           nickname: 'Online Test User',
         );
 
-        // Проверяем начальный статус
+        // Check initial status
         expect(userManager.isUserOnline('online_test_user'), isFalse);
 
-        // Аутентифицируем пользователя
+        // Authenticate the user
         await userManager.authenticateUser('online_test_user');
 
-        // Пользователь все еще офлайн, пока не подключен WebSocket
+        // The user is still offline until WebSocket is connected
         expect(userManager.isUserOnline('online_test_user'), isFalse);
 
-        // Получаем список онлайн пользователей
+        // Get the list of online users
         final onlineUsers = userManager.getOnlineUsers();
         final onlineUser = onlineUsers.firstWhere(
           (u) => u.id == 'online_test_user',
@@ -231,15 +231,15 @@ void main() {
         );
         expect(onlineUser.isOnline, isTrue);
 
-        // Отключаем пользователя
+        // Disconnect the user
         userManager.disconnectUser('online_test_user');
         expect(userManager.isUserOnline('online_test_user'), isFalse);
       });
     });
 
-    group('Статистика системы', () {
-      test('должен предоставить корректную статистику', () async {
-        // Регистрируем несколько пользователей
+    group('System statistics', () {
+      test('should provide correct statistics', () async {
+        // Register multiple users
         await userManager.registerUser(
           id: 'stats_user_1',
           publicSigningKey: 'stats_key_1',
@@ -254,31 +254,31 @@ void main() {
           nickname: 'Stats User 2',
         );
 
-        // Отправляем сообщения
+        // Send messages
         await messageManager.sendMessage(
           senderId: 'stats_user_1',
           receiverId: 'stats_user_2',
-          encryptedContent: 'Статистическое сообщение 1',
+          encryptedContent: 'Statistical message 1',
           signature: 'stats_sig_1',
         );
 
         final message2 = await messageManager.sendMessage(
           senderId: 'stats_user_2',
           receiverId: 'stats_user_1',
-          encryptedContent: 'Статистическое сообщение 2',
+          encryptedContent: 'Statistical message 2',
           signature: 'stats_sig_2',
         );
 
-        // Помечаем одно сообщение как прочитанное
+        // Mark one message as read
         await messageManager.markMessageAsRead(message2.id, 'stats_user_1');
 
-        // Получаем статистику пользователей
+        // Get user statistics
         final userStats = userManager.getUserStats();
         expect(userStats['total'], greaterThanOrEqualTo(2));
         expect(userStats['online'], isA<int>());
         expect(userStats['offline'], isA<int>());
 
-        // Получаем статистику сообщений
+        // Get message statistics
         final messageStats = messageManager.getMessageStats();
         expect(messageStats['total'], greaterThanOrEqualTo(2));
         expect(messageStats['delivered'], isA<int>());
@@ -286,8 +286,8 @@ void main() {
       });
     });
 
-    group('Обработка ошибок', () {
-      test('должен корректно обработать попытку аутентификации несуществующего пользователя', () async {
+    group('Error handling', () {
+      test('should handle authentication attempt for non-existent user', () async {
         final isAuthenticated = await authService.authenticateUser(
           'nonexistent_user',
           'fake_signature',
@@ -297,8 +297,8 @@ void main() {
         expect(isAuthenticated, isFalse);
       });
 
-      test('должен корректно обработать отправку сообщения несуществующему пользователю', () async {
-        // Регистрируем только отправителя
+      test('should handle sending a message to a non-existent user', () async {
+        // Register only the sender
         await userManager.registerUser(
           id: 'sender_only',
           publicSigningKey: 'sender_key',
@@ -306,21 +306,21 @@ void main() {
           nickname: 'Sender Only',
         );
 
-        // Пытаемся отправить сообщение несуществующему получателю
+        // Try to send a message to a non-existent receiver
         final message = await messageManager.sendMessage(
           senderId: 'sender_only',
           receiverId: 'nonexistent_receiver',
-          encryptedContent: 'Сообщение в никуда',
+          encryptedContent: 'Message to nowhere',
           signature: 'nowhere_sig',
         );
 
-        // Сообщение должно быть создано, но не доставлено
+        // The message should be created but not delivered
         expect(message, isNotNull);
         expect(message.receiverId, equals('nonexistent_receiver'));
         expect(message.status, equals(DeliveryStatus.sent));
       });
 
-      test('должен корректно обработать попытку пометить несуществующее сообщение как прочитанное', () async {
+      test('should handle attempt to mark a non-existent message as read', () async {
         final success = await messageManager.markMessageAsRead(
           'nonexistent_message_id',
           'any_user_id',

@@ -3,12 +3,12 @@ import 'package:cryptography/cryptography.dart';
 import 'dart:convert';
 
 void main() {
-  // Инициализируем Flutter binding для тестов
+  // Initialize Flutter binding for tests
   TestWidgetsFlutterBinding.ensureInitialized();
   
   group('KeyManager Crypto Tests', () {
-    group('Криптографические операции', () {
-      test('должен генерировать Ed25519 ключи для подписи', () async {
+    group('Cryptographic operations', () {
+      test('should generate Ed25519 keys for signing', () async {
         final ed25519 = Ed25519();
         final keyPair = await ed25519.newKeyPair();
         final publicKey = await keyPair.extractPublicKey();
@@ -19,7 +19,7 @@ void main() {
         expect(publicKey.bytes.length, equals(32)); // Ed25519 public key size
       });
 
-      test('должен генерировать X25519 ключи для шифрования', () async {
+      test('should generate X25519 keys for encryption', () async {
         final x25519 = X25519();
         final keyPair = await x25519.newKeyPair();
         final publicKey = await keyPair.extractPublicKey();
@@ -30,21 +30,21 @@ void main() {
         expect(publicKey.bytes.length, equals(32)); // X25519 public key size
       });
 
-      test('должен конвертировать ключи в base64 и обратно', () async {
+      test('should convert keys to base64 and back', () async {
         final ed25519 = Ed25519();
         final keyPair = await ed25519.newKeyPair();
         final publicKey = await keyPair.extractPublicKey();
         
-        // Конвертируем в base64
+        // Convert to base64
         final keyString = base64Encode(publicKey.bytes);
         expect(keyString, isNotEmpty);
         
-        // Конвертируем обратно
+        // Convert back
         final restoredBytes = base64Decode(keyString);
         expect(restoredBytes, equals(publicKey.bytes));
       });
 
-      test('должен создавать детерминированные ключи из seed', () async {
+      test('should create deterministic keys from seed', () async {
         final ed25519 = Ed25519();
         final seed = List.generate(32, (i) => i + 1);
         
@@ -57,7 +57,7 @@ void main() {
         expect(publicKey1.bytes, equals(publicKey2.bytes));
       });
 
-      test('должен генерировать разные ключи для разных seed', () async {
+      test('should generate different keys for different seeds', () async {
         final ed25519 = Ed25519();
         final seed1 = List.generate(32, (i) => i + 1);
         final seed2 = List.generate(32, (i) => i + 2);
@@ -71,12 +71,12 @@ void main() {
         expect(publicKey1.bytes, isNot(equals(publicKey2.bytes)));
       });
 
-      test('должен создавать userId из публичного ключа', () async {
+      test('should create a userId from a public key', () async {
         final ed25519 = Ed25519();
         final keyPair = await ed25519.newKeyPair();
         final publicKey = await keyPair.extractPublicKey();
         
-        // Имитируем создание userId из ключа (как в KeyManager)
+        // Simulate creating userId from a key (as in KeyManager)
         final keyString = base64Encode(publicKey.bytes);
         final hash = await Sha256().hash(utf8.encode(keyString));
         final userId = base64Encode(hash.bytes).substring(0, 16);
@@ -85,7 +85,7 @@ void main() {
         expect(userId.length, equals(16));
       });
 
-      test('должен создавать одинаковые userId для одинаковых ключей', () async {
+      test('should create the same userId for identical keys', () async {
         final ed25519 = Ed25519();
         final seed = List.generate(32, (i) => i + 1);
         
@@ -107,7 +107,7 @@ void main() {
         expect(userId1, equals(userId2));
       });
 
-      test('должен создавать разные userId для разных ключей', () async {
+      test('should create different userIds for different keys', () async {
         final ed25519 = Ed25519();
         
         final keyPair1 = await ed25519.newKeyPair();
@@ -128,7 +128,7 @@ void main() {
         expect(userId1, isNot(equals(userId2)));
       });
 
-      test('должен работать с X25519 ключами для шифрования', () async {
+      test('should work with X25519 keys for encryption', () async {
         final x25519 = X25519();
         
         final aliceKeyPair = await x25519.newKeyPair();
@@ -137,13 +137,13 @@ void main() {
         final alicePublicKey = await aliceKeyPair.extractPublicKey();
         final bobPublicKey = await bobKeyPair.extractPublicKey();
         
-        // Alice создает общий секрет с Bob
+        // Alice creates a shared secret with Bob
         final aliceSharedSecret = await x25519.sharedSecretKey(
           keyPair: aliceKeyPair,
           remotePublicKey: bobPublicKey,
         );
         
-        // Bob создает общий секрет с Alice
+        // Bob creates a shared secret with Alice
         final bobSharedSecret = await x25519.sharedSecretKey(
           keyPair: bobKeyPair,
           remotePublicKey: alicePublicKey,
@@ -155,7 +155,7 @@ void main() {
         expect(aliceSecretBytes, equals(bobSecretBytes));
       });
 
-      test('должен проверять валидность Ed25519 подписей', () async {
+      test('should verify validity of Ed25519 signatures', () async {
         final ed25519 = Ed25519();
         final keyPair = await ed25519.newKeyPair();
         final publicKey = await keyPair.extractPublicKey();

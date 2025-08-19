@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-/// Модель пользователя на сервере
+/// Server-side user model
 class User {
   final String id;
   final String publicSigningKey;
@@ -18,7 +18,7 @@ class User {
     this.nickname,
   });
 
-  /// Создает пользователя из JSON
+  /// Creates a user from JSON
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'] as String,
@@ -30,7 +30,7 @@ class User {
     );
   }
 
-  /// Конвертирует пользователя в JSON
+  /// Converts the user to JSON
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -42,7 +42,7 @@ class User {
     };
   }
 
-  /// Создает копию пользователя с обновленными полями
+  /// Creates a copy of the user with updated fields
   User copyWith({
     String? id,
     String? publicSigningKey,
