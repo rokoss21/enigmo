@@ -871,7 +871,7 @@ flutter analyze
 
 **Need help? Have questions? Found a security issue?**
 
-[📧 Email](mailto:support@enigmo.app) • [💬 Discord](https://discord.gg/enigmo) • [🐦 Twitter](https://twitter.com/enigmoapp) • [🔒 Security Issues](mailto:security@enigmo.app)
+[📧 Email](mailto:rokoss21@yandex.com) • [💬 Telegram](https://t.me/rokoss21)
 
 </div>
 
