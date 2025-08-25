@@ -6,6 +6,7 @@ import '../models/message.dart';
 import '../services/network_service.dart';
 import '../services/key_manager.dart';
 import 'chat_screen.dart';
+import 'settings_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -340,6 +341,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
         ),
         backgroundColor: scheme.surfaceVariant,
         actions: [
+          IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
+          ),
           // Connection indicator (green online, red offline)
           Container(
             margin: const EdgeInsets.only(right: 16),

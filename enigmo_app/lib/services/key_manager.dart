@@ -65,16 +65,51 @@ class KeyManager {
         return null;
       }
       
+      // Validate stored data
+      if (signingKeyData.isEmpty || encryptionKeyData.isEmpty) {
+        print('ERROR KeyManager.loadUserKeys: Empty key data found in storage');
+        await deleteUserKeys(); // Clean up corrupted data
+        return null;
+      }
+      
       // Restore keys from saved data
       final ed25519 = Ed25519();
-      final signingKeyPair = await ed25519.newKeyPairFromSeed(
-        base64Decode(signingKeyData),
-      );
+      late final List<int> signingKeyBytes;
+      
+      try {
+        signingKeyBytes = base64Decode(signingKeyData);
+      } catch (e) {
+        print('ERROR KeyManager.loadUserKeys: Invalid base64 signing key data: $e');
+        await deleteUserKeys(); // Clean up corrupted data
+        return null;
+      }
+      
+      if (signingKeyBytes.length != 32) {
+        print('ERROR KeyManager.loadUserKeys: Invalid signing key length: ${signingKeyBytes.length}');
+        await deleteUserKeys(); // Clean up corrupted data
+        return null;
+      }
+      
+      final signingKeyPair = await ed25519.newKeyPairFromSeed(signingKeyBytes);
       
       final x25519 = X25519();
-      final encryptionKeyPair = await x25519.newKeyPairFromSeed(
-        base64Decode(encryptionKeyData),
-      );
+      late final List<int> encryptionKeyBytes;
+      
+      try {
+        encryptionKeyBytes = base64Decode(encryptionKeyData);
+      } catch (e) {
+        print('ERROR KeyManager.loadUserKeys: Invalid base64 encryption key data: $e');
+        await deleteUserKeys(); // Clean up corrupted data
+        return null;
+      }
+      
+      if (encryptionKeyBytes.length != 32) {
+        print('ERROR KeyManager.loadUserKeys: Invalid encryption key length: ${encryptionKeyBytes.length}');
+        await deleteUserKeys(); // Clean up corrupted data
+        return null;
+      }
+      
+      final encryptionKeyPair = await x25519.newKeyPairFromSeed(encryptionKeyBytes);
       
       _currentKeyPair = KeyPair(
         signingKeyPair: signingKeyPair,
@@ -84,9 +119,21 @@ class KeyManager {
       // Load user ID
       _userId = await _storage.read(key: _userIdKey);
       
+      // Validate that keys can extract public keys properly
+      try {
+        await _currentKeyPair!.signingKeyPair.extractPublicKey();
+        await _currentKeyPair!.encryptionKeyPair.extractPublicKey();
+      } catch (e) {
+        print('ERROR KeyManager.loadUserKeys: Failed to extract public keys: $e');
+        await deleteUserKeys(); // Clean up corrupted data
+        _currentKeyPair = null;
+        return null;
+      }
+      
       return _currentKeyPair;
     } catch (e) {
-      print('Error loading keys: $e');
+      print('ERROR KeyManager.loadUserKeys: Error loading keys: $e');
+      await deleteUserKeys(); // Clean up potentially corrupted data
       return null;
     }
   }
@@ -189,14 +236,26 @@ class KeyManager {
   
   /// Converts a string back to a public key
   static Future<SimplePublicKey> publicKeyFromString(String keyString, {bool isEncryption = true}) async {
-    final bytes = base64Decode(keyString);
-    
-    if (isEncryption) {
-      final x25519 = X25519();
-      return SimplePublicKey(bytes, type: KeyPairType.x25519);
-    } else {
-      final ed25519 = Ed25519();
-      return SimplePublicKey(bytes, type: KeyPairType.ed25519);
+    try {
+      // Validate input
+      if (keyString.isEmpty) {
+        throw Exception('Key string cannot be empty');
+      }
+      
+      final bytes = base64Decode(keyString);
+      
+      // Validate key length
+      if (bytes.length != 32) {
+        throw Exception('Invalid key length: ${bytes.length}. Expected 32 bytes.');
+      }
+      
+      if (isEncryption) {
+        return SimplePublicKey(bytes, type: KeyPairType.x25519);
+      } else {
+        return SimplePublicKey(bytes, type: KeyPairType.ed25519);
+      }
+    } catch (e) {
+      throw Exception('Failed to parse public key: $e');
     }
   }
 }

@@ -36,18 +36,15 @@ class WebSocketHandler {
         try {
           final message = jsonDecode(data as String) as Map<String, dynamic>;
           
-          // Update userId if the user authenticated
+          // Update userId when authentication succeeds
           if (message['type'] == 'auth') {
-            final tempUserId = message['userId'] as String?;
-            final user = tempUserId != null ? await _userManager.authenticateUser(tempUserId) : null;
-            if (user != null) {
-              userId = tempUserId;
-              _userManager.connectUser(userId!, webSocket);
-              // Ephemeral mode: offline delivery is disabled
+            final authResult = await _handleAuthAndGetUserId(webSocket, message);
+            if (authResult != null) {
+              userId = authResult;
             }
+          } else {
+            await _handleMessage(webSocket, message, userId);
           }
-          
-          await _handleMessage(webSocket, message, userId);
         } catch (e, stackTrace) {
           _logger.error('Message processing error: $e');
           _sendError(webSocket, 'Message processing error: $e');
@@ -79,10 +76,6 @@ class WebSocketHandler {
     switch (type) {
       case 'register':
         await _handleRegister(webSocket, message);
-        break;
-        
-      case 'auth':
-        await _handleAuth(webSocket, message);
         break;
         
       case 'send_message':
@@ -171,8 +164,8 @@ class WebSocketHandler {
     }
   }
 
-  /// Handles user authentication
-  Future<void> _handleAuth(WebSocketChannel webSocket, Map<String, dynamic> message) async {
+  /// Handles user authentication and returns userId if successful
+  Future<String?> _handleAuthAndGetUserId(WebSocketChannel webSocket, Map<String, dynamic> message) async {
     try {
       final userId = message['userId'] as String?;
       final signature = message['signature'] as String?;
@@ -180,13 +173,19 @@ class WebSocketHandler {
       
       if (userId == null || signature == null || timestamp == null) {
         _sendError(webSocket, 'Missing required fields for authentication');
-        return;
+        return null;
       }
-
-      final user = await _userManager.authenticateUser(userId);
-      final success = user != null;
-
-      if (success) {
+      
+      // CRITICAL: Validate input parameters
+      if (userId.isEmpty || signature.isEmpty || timestamp.isEmpty) {
+        _sendError(webSocket, 'Empty authentication parameters');
+        return null;
+      }
+      
+      // CRITICAL: Verify signature before authenticating
+      final authSuccess = await _authService.authenticateUser(userId, signature, timestamp);
+      
+      if (authSuccess) {
         // Connect the user to WebSocket (register the channel itself)
         _userManager.connectUser(userId, webSocket);
         
@@ -195,14 +194,17 @@ class WebSocketHandler {
           'success': true,
         });
         
-        // Ephemeral mode: offline delivery is disabled
-        
         _logger.info('User authenticated: $userId');
+        return userId; // Return the authenticated userId
       } else {
-        _sendError(webSocket, 'Authentication error');
+        _sendError(webSocket, 'Authentication failed: invalid signature or timestamp');
+        _logger.warning('Failed authentication attempt for user: $userId');
+        return null;
       }
     } catch (e) {
       _sendError(webSocket, 'Authentication error: $e');
+      _logger.error('Authentication error: $e');
+      return null;
     }
   }
 

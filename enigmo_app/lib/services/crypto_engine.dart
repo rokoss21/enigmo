@@ -45,12 +45,21 @@ class CryptoEngine {
     try {
       print('INFO CryptoEngine.encryptMessage: Start encrypting message');
       
+      // Validate input parameters
+      if (message.isEmpty) {
+        throw Exception('Cannot encrypt empty message');
+      }
+      
+      if (recipientEncryptionKey.bytes.isEmpty) {
+        throw Exception('Invalid recipient encryption key');
+      }
+      
       // Get our keys
       final ourEncryptionKeyPair = await KeyManager.getEncryptionKeyPair();
       final ourSigningKeyPair = await KeyManager.getSigningKeyPair();
       
       if (ourEncryptionKeyPair == null || ourSigningKeyPair == null) {
-        throw Exception('User keys not found');
+        throw Exception('User keys not found - please initialize keys first');
       }
       
       print('INFO CryptoEngine.encryptMessage: Keys obtained');
@@ -63,6 +72,10 @@ class CryptoEngine {
       
       // Extract bytes of the shared secret
       final sharedSecretBytes = await sharedSecret.extractBytes();
+      if (sharedSecretBytes.length != 32) {
+        throw Exception('Invalid shared secret length: ${sharedSecretBytes.length}');
+      }
+      
       print('INFO CryptoEngine.encryptMessage: Shared secret derived');
       
       // Create a key for symmetric encryption
@@ -75,6 +88,11 @@ class CryptoEngine {
         secretKey: secretKey,
       );
       
+      // Validate encryption result
+      if (secretBox.cipherText.isEmpty || secretBox.nonce.isEmpty) {
+        throw Exception('Encryption failed - invalid ciphertext or nonce');
+      }
+      
       print('INFO CryptoEngine.encryptMessage: Message encrypted');
       
       // Sign the encrypted data
@@ -82,6 +100,10 @@ class CryptoEngine {
         secretBox.cipherText,
         keyPair: ourSigningKeyPair,
       );
+      
+      if (signature.bytes.length != 64) {
+        throw Exception('Invalid signature length: ${signature.bytes.length}');
+      }
       
       print('INFO CryptoEngine.encryptMessage: Signature created');
       
@@ -105,8 +127,20 @@ class CryptoEngine {
     SimplePublicKey senderSigningKey,
   ) async {
     try {
+      print('INFO CryptoEngine.decryptMessage: Starting decryption');
+      
+      // Validate input parameters
+      if (encryptedMessage.encryptedData.isEmpty ||
+          encryptedMessage.nonce.isEmpty ||
+          encryptedMessage.signature.isEmpty) {
+        throw Exception('Invalid encrypted message: missing required fields');
+      }
+      
       // Get our key for decryption
       final ourEncryptionKeyPair = await KeyManager.getEncryptionKeyPair();
+      if (ourEncryptionKeyPair == null) {
+        throw Exception('Encryption key pair not found');
+      }
       
       // Perform ECDH to derive a shared secret
       final sharedSecret = await _x25519.sharedSecretKey(
@@ -116,11 +150,12 @@ class CryptoEngine {
       
       // Extract bytes of the shared secret
       final sharedSecretBytes = await sharedSecret.extractBytes();
+      print('INFO CryptoEngine.decryptMessage: Shared secret derived');
       
       // Create a key for symmetric decryption
       final secretKey = SecretKey(sharedSecretBytes);
       
-      // Verify signature
+      // Verify signature first
       final encryptedData = base64Decode(encryptedMessage.encryptedData);
       final signature = Signature(
         base64Decode(encryptedMessage.signature),
@@ -133,16 +168,21 @@ class CryptoEngine {
       );
       
       if (!isValidSignature) {
-        throw Exception('Invalid message signature');
+        throw Exception('Invalid message signature - message may be tampered');
       }
       
-      // Decrypt the message
+      print('INFO CryptoEngine.decryptMessage: Signature verified successfully');
+      
+      // Decrypt the message with proper MAC handling
+      final nonce = base64Decode(encryptedMessage.nonce);
+      final mac = encryptedMessage.mac.isEmpty 
+          ? Mac.empty 
+          : Mac(base64Decode(encryptedMessage.mac));
+      
       final secretBox = SecretBox(
         encryptedData,
-        nonce: base64Decode(encryptedMessage.nonce),
-        mac: (encryptedMessage.mac.isEmpty)
-            ? Mac.empty
-            : Mac(base64Decode(encryptedMessage.mac)),
+        nonce: nonce,
+        mac: mac,
       );
       
       final decryptedBytes = await _chacha20.decrypt(
@@ -150,8 +190,13 @@ class CryptoEngine {
         secretKey: secretKey,
       );
       
-      return utf8.decode(decryptedBytes);
-    } catch (e) {
+      final decryptedMessage = utf8.decode(decryptedBytes);
+      print('INFO CryptoEngine.decryptMessage: Message decrypted successfully');
+      
+      return decryptedMessage;
+    } catch (e, stackTrace) {
+      print('ERROR CryptoEngine.decryptMessage: Decryption failed: $e');
+      print('STACK: $stackTrace');
       throw Exception('Message decryption error: $e');
     }
   }
@@ -160,6 +205,15 @@ class CryptoEngine {
   static Future<String> signData(String data) async {
     try {
       print('INFO CryptoEngine.signData: Signing data');
+      
+      // CRITICAL: Validate input data
+      if (data.isEmpty) {
+        throw Exception('Cannot sign empty data');
+      }
+      
+      if (data.length > 1024 * 1024) { // 1MB limit
+        throw Exception('Data too large for signing: ${data.length} bytes');
+      }
       
       final signingKeyPair = await KeyManager.getSigningKeyPair();
       if (signingKeyPair == null) {
@@ -173,6 +227,11 @@ class CryptoEngine {
         dataBytes,
         keyPair: signingKeyPair,
       );
+      
+      // Validate signature result
+      if (signature.bytes.length != 64) {
+        throw Exception('Invalid signature length: ${signature.bytes.length}');
+      }
       
       final signatureString = base64Encode(signature.bytes);
       print('INFO CryptoEngine.signData: Signature created successfully');
@@ -194,8 +253,48 @@ class CryptoEngine {
     try {
       print('INFO CryptoEngine.verifySignature: Verifying signature');
       
+      // CRITICAL: Validate inputs to prevent attacks
+      if (data.isEmpty) {
+        print('ERROR CryptoEngine.verifySignature: Empty data provided');
+        return false;
+      }
+      
+      if (signatureString.isEmpty) {
+        print('ERROR CryptoEngine.verifySignature: Empty signature provided');
+        return false;
+      }
+      
+      if (signingPublicKey.bytes.isEmpty) {
+        print('ERROR CryptoEngine.verifySignature: Invalid public key provided');
+        return false;
+      }
+      
+      if (data.length > 1024 * 1024) { // 1MB limit
+        print('ERROR CryptoEngine.verifySignature: Data too large: ${data.length} bytes');
+        return false;
+      }
+      
       final dataBytes = utf8.encode(data);
-      final signatureBytes = base64Decode(signatureString);
+      late final List<int> signatureBytes;
+      
+      try {
+        signatureBytes = base64Decode(signatureString);
+      } catch (e) {
+        print('ERROR CryptoEngine.verifySignature: Invalid base64 signature: $e');
+        return false;
+      }
+      
+      // Validate signature length for Ed25519
+      if (signatureBytes.length != 64) {
+        print('ERROR CryptoEngine.verifySignature: Invalid signature length: ${signatureBytes.length}');
+        return false;
+      }
+      
+      // Validate public key length for Ed25519
+      if (signingPublicKey.bytes.length != 32) {
+        print('ERROR CryptoEngine.verifySignature: Invalid public key length: ${signingPublicKey.bytes.length}');
+        return false;
+      }
       
       print('INFO CryptoEngine.verifySignature: Data prepared (${dataBytes.length} bytes of data, ${signatureBytes.length} bytes of signature)');
       
@@ -215,7 +314,7 @@ class CryptoEngine {
     } catch (e, stackTrace) {
       print('ERROR CryptoEngine.verifySignature: Error verifying signature: $e');
       print('STACK: $stackTrace');
-      return false;
+      return false; // Always return false on any error for security
     }
   }
   

@@ -35,9 +35,15 @@ dependencies:
   convert: ^3.1.1
   web_socket_channel: ^2.4.0
   flutter_secure_storage: ^9.2.2
+  # Push notification support (temporarily disabled for iOS build)
+  # firebase_messaging: ^14.9.4
+  # firebase_core: ^2.32.0
+  # flutter_local_notifications: ^17.2.3
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
   mockito: ^5.4.4
   build_runner: ^2.4.9

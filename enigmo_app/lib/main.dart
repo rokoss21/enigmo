@@ -1,13 +1,45 @@
 import 'package:flutter/material.dart';
 import 'screens/chat_list_screen.dart';
 import 'screens/splash_screen.dart';
+import 'services/app_lifecycle_service.dart';
 
 void main() {
   runApp(const AnogramApp());
 }
 
-class AnogramApp extends StatelessWidget {
+class AnogramApp extends StatefulWidget {
   const AnogramApp({super.key});
+
+  @override
+  State<AnogramApp> createState() => _AnogramAppState();
+}
+
+class _AnogramAppState extends State<AnogramApp> with WidgetsBindingObserver {
+  late final AppLifecycleService _lifecycleService;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _lifecycleService = AppLifecycleService();
+    // Defer initialization to after first frame so the app UI always renders
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _lifecycleService.initialize();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _lifecycleService.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    _lifecycleService.handleAppLifecycleChange(state);
+  }
 
   @override
   Widget build(BuildContext context) {

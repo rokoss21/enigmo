@@ -101,3 +101,12 @@ logs/
 # Temporary files
 tmp/
 temp/
+
+# Editor & AI tooling
+.vscode/
+.qoder/
+.windsurf/
+
+# Project-level knowledge base (if present at repo root)
+knowledge-base/
+

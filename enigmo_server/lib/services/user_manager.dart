@@ -76,10 +76,16 @@ class UserManager {
 
   /// Gets a user by token (simplified implementation)
   User? getUserByToken(String token) {
-    // Simple implementation: extract userId from token
+    // Extract userId from token format: token_userId_timestamp_random
     if (token.startsWith('token_')) {
       final parts = token.split('_');
-      if (parts.length >= 2) {
+      if (parts.length >= 4) {
+        // For new format: token_userId_timestamp_random
+        // Join parts 1 to (length-2) to handle userIds with underscores
+        final userId = parts.sublist(1, parts.length - 2).join('_');
+        return _users[userId];
+      } else if (parts.length == 3) {
+        // For old format: token_userId_timestamp
         final userId = parts[1];
         return _users[userId];
       }

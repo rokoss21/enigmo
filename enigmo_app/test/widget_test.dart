@@ -16,9 +16,12 @@ void main() {
     // Verify that the ChatListScreen is displayed with the new title
     expect(find.text('Enigmo'), findsOneWidget);
     
-    // Pump a few frames to let the UI settle, but don't wait for network
+    // Pump a few frames and wait for any timers to complete
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+    
+    // Wait for any splash screen timers to complete
+    await tester.pumpAndSettle(const Duration(seconds: 3));
   });
 
   testWidgets('MaterialApp configuration test', (WidgetTester tester) async {
@@ -29,5 +32,8 @@ void main() {
     expect(materialApp.title, equals('Enigmo'));
     expect(materialApp.debugShowCheckedModeBanner, isFalse);
     expect(materialApp.theme, isNotNull);
+    
+    // Wait for any pending timers
+    await tester.pumpAndSettle(const Duration(seconds: 3));
   });
 }

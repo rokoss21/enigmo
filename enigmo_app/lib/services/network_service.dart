@@ -7,6 +7,8 @@ import '../models/message.dart';
 import '../models/chat.dart';
 import 'key_manager.dart';
 import 'crypto_engine.dart';
+// Import lifecycle service for background message handling
+// Note: Using late initialization to avoid circular dependency
 
 /// Service for working with the network and the Bootstrap server
 class NetworkService {
@@ -129,6 +131,8 @@ class NetworkService {
   final Map<String, List<_PendingMessage>> _pendingByReceiver = {};
   // Local in-memory messages per peer (session-lifetime only)
   final Map<String, List<Message>> _inMemoryByPeer = {};
+  // Lifecycle service for background message handling (late init to avoid circular dependency)
+  dynamic _lifecycleService; // Will be AppLifecycleService when initialized
 
   // Local structure for deferred messages
   // ignore: unused_element
@@ -249,13 +253,23 @@ class NetworkService {
 
   String _resolveServerUrl() {
     if (kIsWeb) {
+      // Allow explicit override via query: ?ws=ws://host:port/ws
+      final wsOverride = Uri.base.queryParameters['ws'];
+      if (wsOverride != null && wsOverride.isNotEmpty) {
+        return wsOverride;
+      }
+
+      // Or port override via ?wsPort=NNNN
+      final portParam = Uri.base.queryParameters['wsPort'];
+      final port = int.tryParse(portParam ?? '') ?? 8080;
+
       // On web use the page host. If it's 0.0.0.0 or empty, use localhost
       var host = Uri.base.host;
       if (host.isEmpty || host == '0.0.0.0') {
         host = 'localhost';
       }
       final scheme = Uri.base.scheme == 'https' ? 'wss' : 'ws';
-      return '$scheme://$host:8080/ws';
+      return '$scheme://$host:$port/ws';
     } else {
       // On mobile/desktop keep localhost by default
       return _defaultServerUrl;
@@ -705,6 +719,18 @@ class NetworkService {
       print('DEBUG NetworkService._handleNewMessageAsync: Created message: ${message.id}');
       _storeInMemory(message);
       _newMessageController.add(message);
+      
+      // Trigger background notification if lifecycle service is available
+      if (_lifecycleService != null && _lifecycleService.isInBackground) {
+        final messageData = {
+          'content': message.content,
+          'senderName': 'User ${message.senderId}', // TODO: Get actual sender name from users cache
+          'senderId': message.senderId,
+          'chatId': message.senderId, // Use senderId as chatId for now
+          'timestamp': message.timestamp.toIso8601String(),
+        };
+        _lifecycleService.handleBackgroundMessage(messageData);
+      }
     } catch (e) {
       print('Error handling new message: $e');
     }
@@ -974,6 +1000,115 @@ class NetworkService {
       print('DEBUG NetworkService.addUserToChat: Error: $e');
       return false;
     }
+  }
+
+  // =============================================================================
+  // LIFECYCLE AND SESSION PERSISTENCE METHODS
+  // =============================================================================
+
+  /// Send keepalive ping to maintain connection during background operation
+  Future<void> sendKeepalivePing() async {
+    if (!_isConnected || _channel == null) {
+      print('DEBUG NetworkService.sendKeepalivePing: Not connected, skipping keepalive');
+      return;
+    }
+
+    try {
+      final message = {
+        'type': 'keepalive',
+        'userId': _userId,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      print('DEBUG NetworkService.sendKeepalivePing: Sending keepalive ping');
+      _channel!.sink.add(jsonEncode(message));
+    } catch (e) {
+      print('DEBUG NetworkService.sendKeepalivePing: Error sending keepalive: $e');
+    }
+  }
+
+  /// Set user status (active/inactive) to notify server of user activity state
+  Future<void> setUserStatus({required bool isActive}) async {
+    if (!_isConnected || _channel == null || _userId == null) {
+      print('DEBUG NetworkService.setUserStatus: Not connected or missing userId, skipping status update');
+      return;
+    }
+
+    try {
+      final message = {
+        'type': 'user_status',
+        'userId': _userId,
+        'isActive': isActive,
+        'status': isActive ? 'active' : 'away',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      print('DEBUG NetworkService.setUserStatus: Setting user status to ${isActive ? "active" : "away"}');
+      _channel!.sink.add(jsonEncode(message));
+    } catch (e) {
+      print('DEBUG NetworkService.setUserStatus: Error setting user status: $e');
+    }
+  }
+
+  /// Force reconnection (for recovery after background periods)
+  Future<bool> reconnect() async {
+    print('DEBUG NetworkService.reconnect: Attempting forced reconnection');
+    
+    // Reset manual disconnect flag to allow reconnection
+    _manualDisconnect = false;
+    
+    try {
+      // Disconnect cleanly first
+      if (_isConnected) {
+        print('DEBUG NetworkService.reconnect: Disconnecting existing connection');
+        disconnect();
+        // Wait a moment for clean disconnection
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      
+      // Attempt to reconnect
+      final success = await connect();
+      
+      if (success && _userId != null) {
+        // Re-authenticate after reconnection
+        print('DEBUG NetworkService.reconnect: Re-authenticating after reconnection');
+        final authSuccess = await authenticate();
+        if (authSuccess) {
+          print('DEBUG NetworkService.reconnect: Reconnection and re-authentication successful');
+          return true;
+        } else {
+          print('DEBUG NetworkService.reconnect: Re-authentication failed after reconnection');
+          return false;
+        }
+      }
+      
+      print('DEBUG NetworkService.reconnect: Reconnection failed');
+      return false;
+    } catch (e) {
+      print('DEBUG NetworkService.reconnect: Error during reconnection: $e');
+      return false;
+    }
+  }
+
+  /// Get current connection state
+  // bool get isConnected => _isConnected; // Duplicate removed - already defined above
+  
+  /// Get current user ID
+  String? get currentUserId => _userId;
+  
+  /// Check if currently reconnecting
+  bool get isReconnecting => _isReconnecting;
+  
+  /// Disable automatic reconnection (for manual disconnect)
+  void setManualDisconnect(bool manual) {
+    _manualDisconnect = manual;
+    print('DEBUG NetworkService.setManualDisconnect: Manual disconnect set to $manual');
+  }
+
+  /// Set lifecycle service for background message handling (to avoid circular import)
+  void setLifecycleService(dynamic lifecycleService) {
+    _lifecycleService = lifecycleService;
+    print('DEBUG NetworkService: Lifecycle service integrated for background notifications');
   }
 }
 
