@@ -499,7 +499,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               label: const Text('Copy my ID'),
                             ),
                             OutlinedButton.icon(
-                              onPressed: _isConnected ? _showAddUserDialog : null,
+                              onPressed: _isConnected ? _showAddUserByIdDialog : null,
                               icon: const Icon(Icons.person_add),
                               label: const Text('Connect to ID'),
                             ),
