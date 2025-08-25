@@ -390,22 +390,117 @@ class _ChatListScreenState extends State<ChatListScreen> {
               ),
             )
           : _chats.isEmpty
-              ? const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text(
-                        'No active chats',
-                        style: TextStyle(fontSize: 18, color: Colors.grey),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Other users will appear here',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
+              ? Align(
+                  alignment: const Alignment(0, -0.2),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Icon(Icons.forum_outlined, size: 72, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Welcome to Enigmo',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _isConnected ? 'To start chatting, follow a few quick steps' : 'Please connect to the server first... ',
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 20),
+                        // Step 1
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Icon(Icons.content_copy, color: Colors.white70),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '1) Copy your ID — tap the ID at the top (AppBar) or use the button below',
+                                style: TextStyle(color: Colors.white70, height: 1.3),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // Step 2
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Icon(Icons.person_add_alt_1, color: Colors.white70),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '2) Add a contact — tap + in the top-right and paste their ID',
+                                style: TextStyle(color: Colors.white70, height: 1.3),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // Step 3
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Icon(Icons.notifications_active_outlined, color: Colors.white70),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '3) Notifications — enable/disable them in Settings',
+                                style: TextStyle(color: Colors.white70, height: 1.3),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // Step 4 — Security
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Icon(Icons.shield_outlined, color: Colors.white70),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '4) Security — end-to-end: X25519 key agreement, ChaCha20-Poly1305 AEAD encryption, Ed25519 signatures, SHA-256 hashing',
+                                style: TextStyle(color: Colors.white70, height: 1.3),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        // Quick actions
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 12,
+                          runSpacing: 8,
+                          children: [
+                            FilledButton.icon(
+                              onPressed: _currentUserId != null ? _copyUserId : null,
+                              icon: const Icon(Icons.copy),
+                              label: const Text('Copy my ID'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _isConnected ? _showAddUserDialog : null,
+                              icon: const Icon(Icons.person_add),
+                              label: const Text('Add contact'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                                );
+                              },
+                              icon: const Icon(Icons.settings),
+                              label: const Text('Settings'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 )
               : ListView.builder(
