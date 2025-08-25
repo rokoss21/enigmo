@@ -435,7 +435,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                '2) Add a contact — tap + in the top-right and paste their ID',
+                                '2) Connect to ID — tap + in the top-right or use the button below, then paste the user ID',
                                 style: TextStyle(color: Colors.white70, height: 1.3),
                               ),
                             ),
@@ -501,7 +501,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             OutlinedButton.icon(
                               onPressed: _isConnected ? _showAddUserDialog : null,
                               icon: const Icon(Icons.person_add),
-                              label: const Text('Add contact'),
+                              label: const Text('Connect to ID'),
                             ),
                             OutlinedButton.icon(
                               onPressed: () {
