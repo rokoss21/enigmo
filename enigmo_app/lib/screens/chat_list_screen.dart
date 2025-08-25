@@ -471,6 +471,21 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 12),
+                        // Step 5 — Sessions
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Icon(Icons.restart_alt, color: Colors.white70),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '5) Sessions — when you generate a new ID or exit the app, all sessions are cleared for privacy',
+                                style: TextStyle(color: Colors.white70, height: 1.3),
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 20),
                         // Quick actions
                         Wrap(
