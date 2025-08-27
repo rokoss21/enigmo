@@ -1,261 +1,260 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:crypto/crypto.dart';
+import 'crypto_engine.dart';
 
-class KeyPair {
-  final SimpleKeyPair signingKeyPair;
-  final SimpleKeyPair encryptionKeyPair;
-  
-  KeyPair({
-    required this.signingKeyPair,
-    required this.encryptionKeyPair,
-  });
+// In-memory storage for development (fallback when Keychain is not available)
+class _InMemoryStorage {
+  static final Map<String, String> _storage = {};
+
+  static Future<void> write(String key, String value) async {
+    _storage[key] = value;
+  }
+
+  static Future<String?> read(String key) async {
+    return _storage[key];
+  }
+
+  static Future<void> delete(String key) async {
+    _storage.remove(key);
+  }
+
+  static Future<void> deleteAll() async {
+    _storage.clear();
+  }
 }
 
 class KeyManager {
-  static const _storage = FlutterSecureStorage();
+  static const String _userIdKey = 'user_id';
+  static const String _signingPrivateKey = 'signing_private_key';
+  static const String _encryptionPrivateKey = 'encryption_private_key';
+  static const String _signingPublicKey = 'signing_public_key';
+  static const String _encryptionPublicKey = 'encryption_public_key';
   static const String _signingKeyKey = 'signing_key';
   static const String _encryptionKeyKey = 'encryption_key';
-  static const String _userIdKey = 'user_id';
-  
-  static KeyPair? _currentKeyPair;
+
+  static final FlutterSecureStorage _storage = const FlutterSecureStorage();
   static String? _userId;
-  
-  /// Generates a new key pair for the user
-  static Future<KeyPair> generateUserKeys() async {
-    // Ed25519 for digital signatures
-    final ed25519 = Ed25519();
-    final signingKeyPair = await ed25519.newKeyPair();
-    
-    // X25519 for encryption (ECDH)
-    final x25519 = X25519();
-    final encryptionKeyPair = await x25519.newKeyPair();
-    
-    final keyPair = KeyPair(
-      signingKeyPair: signingKeyPair,
-      encryptionKeyPair: encryptionKeyPair,
-    );
-    
-    // Save keys to secure storage
-    await _saveKeyPair(keyPair);
-    
-    _currentKeyPair = keyPair;
-    
-    // Generate and store the user ID
-    final userId = await _generateUserId(signingKeyPair);
-    await _storage.write(key: _userIdKey, value: userId);
-    _userId = userId;
-    
-    return keyPair;
+  static KeyPair? _currentKeyPair;
+
+  static Future<String?> _read(String key) async {
+    return await _InMemoryStorage.read(key);
   }
-  
-  /// Loads existing keys from storage
-  static Future<KeyPair?> loadUserKeys() async {
-    if (_currentKeyPair != null) {
-      return _currentKeyPair;
-    }
-    
+
+  static Future<void> _write(String key, String value) async {
+    await _InMemoryStorage.write(key, value);
+  }
+
+  static Future<void> _delete(String key) async {
+    await _InMemoryStorage.delete(key);
+  }
+
+  static Future<void> _deleteAll() async {
+    await _InMemoryStorage.deleteAll();
+  }
+
+  /// Generate new user keys
+  static Future<UserKeys?> generateUserKeys() async {
     try {
-      final signingKeyData = await _storage.read(key: _signingKeyKey);
-      final encryptionKeyData = await _storage.read(key: _encryptionKeyKey);
-      
-      if (signingKeyData == null || encryptionKeyData == null) {
-        return null;
-      }
-      
-      // Validate stored data
-      if (signingKeyData.isEmpty || encryptionKeyData.isEmpty) {
-        print('ERROR KeyManager.loadUserKeys: Empty key data found in storage');
-        await deleteUserKeys(); // Clean up corrupted data
-        return null;
-      }
-      
-      // Restore keys from saved data
-      final ed25519 = Ed25519();
-      late final List<int> signingKeyBytes;
-      
-      try {
-        signingKeyBytes = base64Decode(signingKeyData);
-      } catch (e) {
-        print('ERROR KeyManager.loadUserKeys: Invalid base64 signing key data: $e');
-        await deleteUserKeys(); // Clean up corrupted data
-        return null;
-      }
-      
-      if (signingKeyBytes.length != 32) {
-        print('ERROR KeyManager.loadUserKeys: Invalid signing key length: ${signingKeyBytes.length}');
-        await deleteUserKeys(); // Clean up corrupted data
-        return null;
-      }
-      
-      final signingKeyPair = await ed25519.newKeyPairFromSeed(signingKeyBytes);
-      
-      final x25519 = X25519();
-      late final List<int> encryptionKeyBytes;
-      
-      try {
-        encryptionKeyBytes = base64Decode(encryptionKeyData);
-      } catch (e) {
-        print('ERROR KeyManager.loadUserKeys: Invalid base64 encryption key data: $e');
-        await deleteUserKeys(); // Clean up corrupted data
-        return null;
-      }
-      
-      if (encryptionKeyBytes.length != 32) {
-        print('ERROR KeyManager.loadUserKeys: Invalid encryption key length: ${encryptionKeyBytes.length}');
-        await deleteUserKeys(); // Clean up corrupted data
-        return null;
-      }
-      
-      final encryptionKeyPair = await x25519.newKeyPairFromSeed(encryptionKeyBytes);
-      
-      _currentKeyPair = KeyPair(
+      print('INFO KeyManager.generateUserKeys: Generating new user keys');
+
+      // Generate Ed25519 key pair for signing
+      final signingKeyPair = await Ed25519().newKeyPair();
+      final signingPrivateKey = await signingKeyPair.extractPrivateKeyBytes();
+      final signingPublicKey = await signingKeyPair.extractPublicKey();
+
+      // Generate X25519 key pair for encryption
+      final encryptionKeyPair = await X25519().newKeyPair();
+      final encryptionPrivateKey = await encryptionKeyPair.extractPrivateKeyBytes();
+      final encryptionPublicKey = await encryptionKeyPair.extractPublicKey();
+
+      final userKeys = UserKeys(
         signingKeyPair: signingKeyPair,
         encryptionKeyPair: encryptionKeyPair,
+        signingPrivateKey: Uint8List.fromList(signingPrivateKey),
+        encryptionPrivateKey: Uint8List.fromList(encryptionPrivateKey),
+        signingPublicKey: signingPublicKey,
+        encryptionPublicKey: encryptionPublicKey,
       );
-      
-      // Load user ID
-      _userId = await _storage.read(key: _userIdKey);
-      
-      // Validate that keys can extract public keys properly
-      try {
-        await _currentKeyPair!.signingKeyPair.extractPublicKey();
-        await _currentKeyPair!.encryptionKeyPair.extractPublicKey();
-      } catch (e) {
-        print('ERROR KeyManager.loadUserKeys: Failed to extract public keys: $e');
-        await deleteUserKeys(); // Clean up corrupted data
-        _currentKeyPair = null;
-        return null;
-      }
-      
-      return _currentKeyPair;
-    } catch (e) {
-      print('ERROR KeyManager.loadUserKeys: Error loading keys: $e');
-      await deleteUserKeys(); // Clean up potentially corrupted data
+
+      // Save keys to storage
+      await _saveKeysToStorage(userKeys);
+
+      print('INFO KeyManager.generateUserKeys: Keys generated and saved successfully');
+      return userKeys;
+    } catch (e, stackTrace) {
+      print('ERROR KeyManager.generateUserKeys: Error generating keys: $e');
+      print('STACK: $stackTrace');
       return null;
     }
   }
-  
-  /// Returns the user ID (first 16 characters from the public key hash)
-  static Future<String?> getUserId() async {
-    if (_userId != null) {
-      print('Returning cached userId: $_userId');
-      return _userId!;
+
+  /// Load user keys from storage
+  static Future<UserKeys?> loadUserKeys() async {
+    try {
+      print('INFO KeyManager.loadUserKeys: Loading user keys from storage');
+
+      // Load private keys from storage
+      final signingPrivateKeyStr = await _read(_signingPrivateKey);
+      final encryptionPrivateKeyStr = await _read(_encryptionPrivateKey);
+      final signingPublicKeyStr = await _read(_signingPublicKey);
+      final encryptionPublicKeyStr = await _read(_encryptionPublicKey);
+
+      if (signingPrivateKeyStr == null ||
+          encryptionPrivateKeyStr == null ||
+          signingPublicKeyStr == null ||
+          encryptionPublicKeyStr == null) {
+        print('INFO KeyManager.loadUserKeys: No keys found in storage');
+        return null;
+      }
+
+      // Decode keys from base64
+      final signingPrivateKey = base64Decode(signingPrivateKeyStr);
+      final encryptionPrivateKey = base64Decode(encryptionPrivateKeyStr);
+      final signingPublicKey = await publicKeyFromString(signingPublicKeyStr, isEncryption: false);
+      final encryptionPublicKey = await publicKeyFromString(encryptionPublicKeyStr, isEncryption: true);
+
+      // Recreate key pairs
+      final signingKeyPair = await Ed25519().newKeyPairFromSeed(signingPrivateKey);
+      final encryptionKeyPair = await X25519().newKeyPairFromSeed(encryptionPrivateKey);
+
+      final userKeys = UserKeys(
+        signingKeyPair: signingKeyPair,
+        encryptionKeyPair: encryptionKeyPair,
+        signingPrivateKey: Uint8List.fromList(signingPrivateKey),
+        encryptionPrivateKey: Uint8List.fromList(encryptionPrivateKey),
+        signingPublicKey: signingPublicKey,
+        encryptionPublicKey: encryptionPublicKey,
+      );
+
+      print('INFO KeyManager.loadUserKeys: Keys loaded successfully');
+      return userKeys;
+    } catch (e, stackTrace) {
+      print('ERROR KeyManager.loadUserKeys: Error loading keys: $e');
+      print('STACK: $stackTrace');
+      return null;
     }
-    
-    _userId = await _storage.read(key: _userIdKey);
-    print('Loaded userId from storage: $_userId');
-    
-    return _userId;
   }
-  
-  /// Gets the public key for encryption
-  static Future<SimplePublicKey> getEncryptionPublicKey() async {
-    final keyPair = await loadUserKeys() ?? await generateUserKeys();
-    return await keyPair.encryptionKeyPair.extractPublicKey();
-  }
-  
-  /// Gets the public key for signing
-  static Future<SimplePublicKey> getSigningPublicKey() async {
-    final keyPair = await loadUserKeys() ?? await generateUserKeys();
-    return await keyPair.signingKeyPair.extractPublicKey();
-  }
-  
-  /// Gets the private key for decryption
-  static Future<SimpleKeyPair> getEncryptionKeyPair() async {
-    final keyPair = await loadUserKeys() ?? await generateUserKeys();
-    return keyPair.encryptionKeyPair;
-  }
-  
-  /// Gets the private key for signing
-  static Future<SimpleKeyPair> getSigningKeyPair() async {
-    final keyPair = await loadUserKeys() ?? await generateUserKeys();
-    return keyPair.signingKeyPair;
-  }
-  
-  /// Checks whether the user keys exist
-  static Future<bool> hasUserKeys() async {
-    final signingKey = await _storage.read(key: _signingKeyKey);
-    final encryptionKey = await _storage.read(key: _encryptionKeyKey);
-    return signingKey != null && encryptionKey != null;
-  }
-  
-  /// Sets the user ID (e.g., after registration)
+
+  /// Save user ID
   static Future<void> setUserId(String userId) async {
-    print('Saving userId in KeyManager: $userId');
-    await _storage.write(key: _userIdKey, value: userId);
-    _userId = userId;
-    print('userId successfully saved to storage');
+    try {
+      await _write(_userIdKey, userId);
+      print('INFO KeyManager.setUserId: User ID saved: $userId');
+    } catch (e) {
+      print('ERROR KeyManager.setUserId: Error saving user ID: $e');
+      throw Exception('Failed to save user ID');
+    }
   }
-  
-  /// Deletes all user keys (for reset)
+
+  /// Get user ID
+  static Future<String?> getUserId() async {
+    try {
+      final userId = await _read(_userIdKey);
+      print('INFO KeyManager.getUserId: Retrieved user ID: $userId');
+      return userId;
+    } catch (e) {
+      print('ERROR KeyManager.getUserId: Error retrieving user ID: $e');
+      return null;
+    }
+  }
+
+  /// Delete all user keys and data
   static Future<void> deleteUserKeys() async {
-    await _storage.delete(key: _signingKeyKey);
-    await _storage.delete(key: _encryptionKeyKey);
-    await _storage.delete(key: _userIdKey);
-    _currentKeyPair = null;
-    _userId = null;
+    try {
+      await _deleteAll();
+      print('INFO KeyManager.deleteUserKeys: All keys and data deleted');
+    } catch (e) {
+      print('ERROR KeyManager.deleteUserKeys: Error deleting keys: $e');
+      throw Exception('Failed to delete user keys');
+    }
   }
-  
-  /// Saves the key pair to secure storage
-  static Future<void> _saveKeyPair(KeyPair keyPair) async {
-    // Extract seed/private bytes for storage (more compact than full key)
-    final signingKeyBytes = await keyPair.signingKeyPair.extractPrivateKeyBytes();
-    final encryptionKeyBytes = await keyPair.encryptionKeyPair.extractPrivateKeyBytes();
-    
-    await _storage.write(
-      key: _signingKeyKey,
-      value: base64Encode(signingKeyBytes),
-    );
-    
-    await _storage.write(
-      key: _encryptionKeyKey,
-      value: base64Encode(encryptionKeyBytes),
-    );
+
+  /// Save keys to storage
+  static Future<void> _saveKeysToStorage(UserKeys userKeys) async {
+    try {
+      // Save private keys as base64
+      await _write(
+        _signingPrivateKey,
+        base64Encode(userKeys.signingPrivateKey),
+      );
+      await _write(
+        _encryptionPrivateKey,
+        base64Encode(userKeys.encryptionPrivateKey),
+      );
+
+      // Save public keys as base64
+      await _write(
+        _signingPublicKey,
+        await publicKeyToString(userKeys.signingPublicKey),
+      );
+      await _write(
+        _encryptionPublicKey,
+        await publicKeyToString(userKeys.encryptionPublicKey),
+      );
+
+      print('INFO KeyManager._saveKeysToStorage: Keys saved to storage');
+    } catch (e) {
+      print('ERROR KeyManager._saveKeysToStorage: Error saving keys: $e');
+      throw Exception('Failed to save keys to storage');
+    }
   }
-  
-  /// Generates a user ID from the public key
-  static Future<String> _generateUserId(SimpleKeyPair signingKeyPair) async {
-    final publicKey = await signingKeyPair.extractPublicKey();
-    final publicKeyBytes = publicKey.bytes;
-    
-    // Hash the public key and take the first 16 characters
-    final hash = sha256.convert(publicKeyBytes);
-    final hashHex = hash.toString();
-    
-    return hashHex.substring(0, 16).toUpperCase();
-  }
-  
-  /// Converts a public key to a string for transfer
+
+  /// Convert public key to string
   static Future<String> publicKeyToString(SimplePublicKey publicKey) async {
     final bytes = publicKey.bytes;
     return base64Encode(bytes);
   }
-  
-  /// Converts a string back to a public key
-  static Future<SimplePublicKey> publicKeyFromString(String keyString, {bool isEncryption = true}) async {
-    try {
-      // Validate input
-      if (keyString.isEmpty) {
-        throw Exception('Key string cannot be empty');
-      }
-      
-      final bytes = base64Decode(keyString);
-      
-      // Validate key length
-      if (bytes.length != 32) {
-        throw Exception('Invalid key length: ${bytes.length}. Expected 32 bytes.');
-      }
-      
-      if (isEncryption) {
-        return SimplePublicKey(bytes, type: KeyPairType.x25519);
-      } else {
-        return SimplePublicKey(bytes, type: KeyPairType.ed25519);
-      }
-    } catch (e) {
-      throw Exception('Failed to parse public key: $e');
+
+  /// Convert string to public key
+  static Future<SimplePublicKey> publicKeyFromString(String keyStr, {required bool isEncryption}) async {
+    final bytes = base64Decode(keyStr);
+    if (isEncryption) {
+      return SimplePublicKey(bytes, type: KeyPairType.x25519);
+    } else {
+      return SimplePublicKey(bytes, type: KeyPairType.ed25519);
     }
   }
+
+  /// Get signing key pair
+  static Future<SimpleKeyPair?> getSigningKeyPair() async {
+    final keys = await loadUserKeys();
+    return keys?.signingKeyPair;
+  }
+
+  /// Get encryption key pair
+  static Future<SimpleKeyPair?> getEncryptionKeyPair() async {
+    final keys = await loadUserKeys();
+    return keys?.encryptionKeyPair;
+  }
+}
+
+class UserKeys {
+  final SimpleKeyPair signingKeyPair;
+  final SimpleKeyPair encryptionKeyPair;
+  final Uint8List signingPrivateKey;
+  final Uint8List encryptionPrivateKey;
+  final SimplePublicKey signingPublicKey;
+  final SimplePublicKey encryptionPublicKey;
+
+  UserKeys({
+    required this.signingKeyPair,
+    required this.encryptionKeyPair,
+    required this.signingPrivateKey,
+    required this.encryptionPrivateKey,
+    required this.signingPublicKey,
+    required this.encryptionPublicKey,
+  });
+}
+
+class KeyPair {
+  final SimpleKeyPair signingKeyPair;
+  final SimpleKeyPair encryptionKeyPair;
+
+  KeyPair({
+    required this.signingKeyPair,
+    required this.encryptionKeyPair,
+  });
 }

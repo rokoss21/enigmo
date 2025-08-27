@@ -5,12 +5,16 @@ import '../models/chat.dart';
 import '../services/network_service.dart';
 import '../services/crypto_engine.dart';
 import '../services/key_manager.dart';
+import '../services/audio_call_service.dart';
 import '../widgets/message_bubble.dart';
+import '../models/call.dart';
+import '../screens/audio_call_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final Chat chat;
+  final AudioCallService audioCallService;
 
-  const ChatScreen({super.key, required this.chat});
+  const ChatScreen({super.key, required this.chat, required this.audioCallService});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -38,17 +42,25 @@ class _ChatScreenState extends State<ChatScreen> {
     _loadMessages();
     _setupStatusListener();
     _refreshOtherUserStatus();
+    
+    // Set up call status listener
+    widget.audioCallService.onCallStatusChange = _handleCallStatusChange;
   }
 
   void _setupMessageListener() {
     _newMsgSub = _networkService.newMessages.listen((message) {
       print('DEBUG ChatScreen: Received new message: ${message.id}');
       print('DEBUG ChatScreen: senderId=${message.senderId}, receiverId=${message.receiverId}');
+      print('DEBUG ChatScreen: content="${message.content}"');
       print('DEBUG ChatScreen: otherUserId=${_getOtherUserId()}');
-      
+      print('DEBUG ChatScreen: current userId=${_networkService.userId}');
+
       // Check if the message belongs to this chat
       final otherUserId = _getOtherUserId();
-      if (message.senderId == otherUserId || message.receiverId == otherUserId) {
+      final currentUserId = _networkService.userId;
+
+      if ((message.senderId == otherUserId && message.receiverId == currentUserId) ||
+          (message.senderId == currentUserId && message.receiverId == otherUserId)) {
         print('DEBUG ChatScreen: Message belongs to this chat, adding');
         setState(() {
           _messages.add(message);
@@ -57,6 +69,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _scrollToBottom();
       } else {
         print('DEBUG ChatScreen: Message does NOT belong to this chat');
+        print('DEBUG ChatScreen: Expected sender/receiver: $otherUserId/$currentUserId');
       }
     });
   }
@@ -189,6 +202,17 @@ class _ChatScreenState extends State<ChatScreen> {
     _statusSub?.cancel();
     super.dispose();
   }
+  
+  void _handleCallStatusChange(Call call) {
+    // Handle call status changes
+    if (call.status == CallStatus.connected) {
+      // Navigate to call screen when connected
+      // This would typically be done through the app's navigation system
+    }
+    
+    // Update UI state if needed
+    setState(() {});
+  }
 
   String _formatTime(DateTime timestamp) {
     final now = DateTime.now();
@@ -250,6 +274,10 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.call),
+            onPressed: _startAudioCall,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadMessages,
@@ -352,24 +380,30 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final otherUserId = _getOtherUserId();
-      print('DEBUG ChatScreen _sendMessage: otherUserId=$otherUserId, myUserId=${_networkService.userId}');
+      final currentUserId = _networkService.userId;
+      print('DEBUG ChatScreen _sendMessage: otherUserId=$otherUserId, myUserId=$currentUserId');
+      print('DEBUG ChatScreen _sendMessage: Network connected: ${_networkService.isConnected}');
+      print('DEBUG ChatScreen _sendMessage: Other user online: ${_networkService.isUserOnline(otherUserId)}');
+
       final success = await _networkService.sendMessage(
         otherUserId,
         text,
         type: MessageType.text,
       );
-      print('DEBUG ChatScreen _sendMessage: success=$success');
+      print('DEBUG ChatScreen _sendMessage: Send result: $success');
 
       if (success) {
+        print('DEBUG ChatScreen _sendMessage: Message sent successfully, clearing input');
         _messageController.clear();
         // The message will be added via listener upon receiving confirmation
       } else {
+        print('DEBUG ChatScreen _sendMessage: Failed to send message');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to send message')),
         );
       }
     } catch (e) {
-      print('Error sending message: $e');
+      print('ERROR ChatScreen _sendMessage: Exception: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
@@ -377,6 +411,52 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _isSending = false;
       });
+    }
+  }
+  
+  void _startAudioCall() {
+    final otherUserId = _getOtherUserId();
+
+    // Show loading indicator
+    setState(() {
+      // You could add a loading state here
+    });
+
+    try {
+      // Check if we have a network connection
+      if (!_networkService.isConnected) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No server connection. Please check your network.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      widget.audioCallService.initiateCall(otherUserId);
+
+      // Navigate to call screen immediately
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => AudioCallScreen(audioCallService: widget.audioCallService),
+        ),
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Calling ${widget.chat.name}...'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to start call: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 }

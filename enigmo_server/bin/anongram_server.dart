@@ -28,8 +28,8 @@ void main(List<String> arguments) async {
 
   // Parse command-line arguments
   final parser = ArgParser()
-    ..addOption('port', abbr: 'p', defaultsTo: '8080', help: 'Server port')
-    ..addOption('host', abbr: 'h', defaultsTo: 'localhost', help: 'Server host')
+    ..addOption('port', abbr: 'p', defaultsTo: '8081', help: 'Server port')
+    ..addOption('host', abbr: 'h', defaultsTo: '0.0.0.0', help: 'Server host')
     ..addFlag('help', negatable: false, help: 'Show help');
 
   final argResults = parser.parse(arguments);
@@ -87,7 +87,12 @@ void main(List<String> arguments) async {
 
   // Middleware for CORS and logging
   final handler = Pipeline()
-      .addMiddleware(corsHeaders())
+      .addMiddleware(corsHeaders(headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept, Authorization',
+        'Access-Control-Allow-Credentials': 'true',
+      }))
       .addMiddleware(logRequests())
       .addHandler(router);
 

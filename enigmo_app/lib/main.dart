@@ -2,8 +2,16 @@ import 'package:flutter/material.dart';
 import 'screens/chat_list_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/app_lifecycle_service.dart';
+import 'services/audio_call_service.dart';
+import 'services/network_service.dart';
+import 'services/crypto_engine.dart';
+import 'services/call_notification_service.dart';
+import 'services/incoming_call_handler.dart';
 
 void main() {
+  // Initialize Flutter binding
+  WidgetsFlutterBinding.ensureInitialized();
+
   runApp(const AnogramApp());
 }
 
@@ -16,12 +24,22 @@ class AnogramApp extends StatefulWidget {
 
 class _AnogramAppState extends State<AnogramApp> with WidgetsBindingObserver {
   late final AppLifecycleService _lifecycleService;
+  late final AudioCallService _audioCallService;
+  late final CallNotificationService _callNotificationService;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _lifecycleService = AppLifecycleService();
+
+    // Initialize audio call services
+    // In a real app, these would be properly injected
+    final networkService = NetworkService(); // This would need proper initialization
+    final cryptoEngine = CryptoEngine(); // This would need proper initialization
+    _audioCallService = AudioCallService(networkService, cryptoEngine);
+    _callNotificationService = CallNotificationService(_audioCallService);
+
     // Defer initialization to after first frame so the app UI always renders
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _lifecycleService.initialize();
@@ -119,7 +137,15 @@ class _AnogramAppState extends State<AnogramApp> with WidgetsBindingObserver {
     return MaterialApp(
       title: 'Enigmo',
       theme: theme,
-      home: const SplashScreen(),
+      home: SplashScreen(audioCallService: _audioCallService),
+      builder: (context, child) {
+        return Stack(
+          children: [
+            child!,
+            IncomingCallHandler(audioCallService: _audioCallService),
+          ],
+        );
+      },
       debugShowCheckedModeBanner: false,
     );
   }

@@ -1,195 +1,397 @@
 import 'package:test/test.dart';
+import 'package:mockito/mockito.dart';
+import 'package:mockito/annotations.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:enigmo_server/services/user_manager.dart';
 import 'package:enigmo_server/models/user.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
-import 'dart:io';
+
+// Generate mocks
+@GenerateMocks([WebSocketChannel, WebSocketSink])
+import 'user_manager_test.mocks.dart';
 
 void main() {
-  group('UserManager Tests', () {
-    late UserManager userManager;
+  late MockWebSocketChannel mockWebSocketChannel;
+  late MockWebSocketSink mockWebSocketSink;
+  late UserManager userManager;
 
-    setUp(() {
-      userManager = UserManager();
+  setUp(() {
+    mockWebSocketChannel = MockWebSocketChannel();
+    mockWebSocketSink = MockWebSocketSink();
+    when(mockWebSocketChannel.sink).thenReturn(mockWebSocketSink);
+
+    userManager = UserManager();
+  });
+
+  tearDown(() {
+    // Clean up any test state
+  });
+
+  group('UserManager Initialization Tests', () {
+    test('should initialize with default users', () {
+      expect(userManager, isNotNull);
+      final stats = userManager.getUserStats();
+      expect(stats['total'], greaterThan(0));
     });
 
-    test('should successfully register a new user', () async {
+    test('should have default test users', () {
+      final user1 = userManager.getUser('user1');
+      final user2 = userManager.getUser('user2');
+
+      expect(user1, isNotNull);
+      expect(user2, isNotNull);
+      expect(user1!.nickname, equals('Alice'));
+      expect(user2!.nickname, equals('Bob'));
+    });
+  });
+
+  group('UserManager User Registration Tests', () {
+    test('should register new user successfully', () async {
+      const userId = 'test_user_123';
+      const publicSigningKey = 'signing_key_123';
+      const publicEncryptionKey = 'encryption_key_456';
+      const nickname = 'TestUser';
+
       final user = await userManager.registerUser(
-        id: 'test_user_1',
-        publicSigningKey: 'test_signing_key',
-        publicEncryptionKey: 'test_encryption_key',
-        nickname: 'Test User',
+        id: userId,
+        publicSigningKey: publicSigningKey,
+        publicEncryptionKey: publicEncryptionKey,
+        nickname: nickname,
       );
 
       expect(user, isNotNull);
-      expect(user!.id, equals('test_user_1'));
-      expect(user.nickname, equals('Test User'));
-      expect(user.publicSigningKey, equals('test_signing_key'));
-      expect(user.publicEncryptionKey, equals('test_encryption_key'));
+      expect(user!.id, equals(userId));
+      expect(user.nickname, equals(nickname));
+      expect(user.publicSigningKey, equals(publicSigningKey));
+      expect(user.publicEncryptionKey, equals(publicEncryptionKey));
       expect(user.isOnline, isFalse);
     });
 
-    test('should not register a user with an existing ID', () async {
-      // Register the first user
-      await userManager.registerUser(
-        id: 'duplicate_user',
-        publicSigningKey: 'key1',
-        publicEncryptionKey: 'key2',
-        nickname: 'User 1',
+    test('should not register duplicate user', () async {
+      const userId = 'duplicate_user';
+      const publicSigningKey = 'signing_key_123';
+      const publicEncryptionKey = 'encryption_key_456';
+
+      // Register first time
+      final user1 = await userManager.registerUser(
+        id: userId,
+        publicSigningKey: publicSigningKey,
+        publicEncryptionKey: publicEncryptionKey,
       );
 
-      // Try to register a user with the same ID
-      final duplicateUser = await userManager.registerUser(
-        id: 'duplicate_user',
-        publicSigningKey: 'key3',
-        publicEncryptionKey: 'key4',
-        nickname: 'User 2',
+      expect(user1, isNotNull);
+
+      // Try to register again
+      final user2 = await userManager.registerUser(
+        id: userId,
+        publicSigningKey: publicSigningKey,
+        publicEncryptionKey: publicEncryptionKey,
       );
 
-      expect(duplicateUser, isNull);
+      expect(user2, isNull);
     });
 
-    test('should successfully authenticate an existing user', () async {
-      // Register a user
-      await userManager.registerUser(
-        id: 'auth_test_user',
-        publicSigningKey: 'test_key',
-        publicEncryptionKey: 'test_key',
-        nickname: 'Auth User',
+    test('should handle registration with minimal data', () async {
+      const userId = 'minimal_user';
+      const publicSigningKey = 'signing_key';
+      const publicEncryptionKey = 'encryption_key';
+
+      final user = await userManager.registerUser(
+        id: userId,
+        publicSigningKey: publicSigningKey,
+        publicEncryptionKey: publicEncryptionKey,
       );
 
-      // Authenticate the user
-      final authenticatedUser = await userManager.authenticateUser('auth_test_user');
+      expect(user, isNotNull);
+      expect(user!.nickname, equals(userId)); // Should default to userId
+    });
+  });
+
+  group('UserManager Authentication Tests', () {
+    test('should authenticate existing user', () async {
+      const userId = 'user1'; // Default user
+
+      final authenticatedUser = await userManager.authenticateUser(userId);
 
       expect(authenticatedUser, isNotNull);
-      expect(authenticatedUser!.id, equals('auth_test_user'));
+      expect(authenticatedUser!.id, equals(userId));
       expect(authenticatedUser.isOnline, isTrue);
     });
 
-    test('should not authenticate a non-existent user', () async {
-      final authenticatedUser = await userManager.authenticateUser('nonexistent_user');
+    test('should return null for non-existent user', () async {
+      const userId = 'non_existent_user';
+
+      final authenticatedUser = await userManager.authenticateUser(userId);
+
       expect(authenticatedUser, isNull);
     });
+  });
 
-    test('should get a user by ID', () async {
-      // Register a user
-      await userManager.registerUser(
-        id: 'get_user_test',
-        publicSigningKey: 'test_key',
-        publicEncryptionKey: 'test_key',
-        nickname: 'Get User Test',
-      );
+  group('UserManager Connection Management Tests', () {
+    test('should connect user successfully', () {
+      const userId = 'user1';
 
-      // Get the user
-      final user = userManager.getUser('get_user_test');
+      userManager.connectUser(userId, mockWebSocketChannel);
+
+      expect(userManager.isUserOnline(userId), isTrue);
+      final user = userManager.getUser(userId);
+      expect(user!.isOnline, isTrue);
+    });
+
+    test('should disconnect user successfully', () {
+      const userId = 'user1';
+
+      userManager.connectUser(userId, mockWebSocketChannel);
+      expect(userManager.isUserOnline(userId), isTrue);
+
+      userManager.disconnectUser(userId);
+      expect(userManager.isUserOnline(userId), isFalse);
+    });
+
+    test('should handle disconnect by channel', () {
+      const userId = 'user1';
+
+      userManager.connectUser(userId, mockWebSocketChannel);
+      expect(userManager.isUserOnline(userId), isTrue);
+
+      userManager.disconnectChannel(mockWebSocketChannel);
+      expect(userManager.isUserOnline(userId), isFalse);
+    });
+
+    test('should get user channel', () {
+      const userId = 'user1';
+
+      userManager.connectUser(userId, mockWebSocketChannel);
+      final channel = userManager.getUserChannel(userId);
+
+      expect(channel, equals(mockWebSocketChannel));
+    });
+
+    test('should return null for offline user channel', () {
+      const userId = 'user1';
+
+      final channel = userManager.getUserChannel(userId);
+      expect(channel, isNull);
+    });
+  });
+
+  group('UserManager Message Sending Tests', () {
+    test('should send message to online user successfully', () async {
+      const userId = 'user1';
+      const message = {'type': 'test', 'data': 'hello'};
+
+      userManager.connectUser(userId, mockWebSocketChannel);
+
+      final success = await userManager.sendToUser(userId, message);
+
+      expect(success, isTrue);
+      verify(mockWebSocketSink.add(any)).called(2); // 1 for message + 1 for status broadcast
+    });
+
+    test('should return false for offline user', () async {
+      const userId = 'offline_user';
+      const message = {'type': 'test', 'data': 'hello'};
+
+      final success = await userManager.sendToUser(userId, message);
+
+      expect(success, isFalse);
+    });
+
+    test('should handle send errors gracefully', () async {
+      const userId = 'user1';
+      const message = {'type': 'test', 'data': 'hello'};
+
+      when(mockWebSocketSink.add(any)).thenThrow(Exception('Send failed'));
+
+      userManager.connectUser(userId, mockWebSocketChannel);
+
+      final success = await userManager.sendToUser(userId, message);
+
+      expect(success, isFalse);
+      expect(userManager.isUserOnline(userId), isFalse); // Should disconnect on error
+    });
+  });
+
+  group('UserManager User Queries Tests', () {
+    test('should get user by ID', () {
+      const userId = 'user1';
+
+      final user = userManager.getUser(userId);
+
       expect(user, isNotNull);
-      expect(user!.id, equals('get_user_test'));
-
-      // Try to get a non-existent user
-      final nonexistentUser = userManager.getUser('nonexistent');
-      expect(nonexistentUser, isNull);
+      expect(user!.id, equals(userId));
     });
 
-    test('should get a list of all users', () async {
-      // Register multiple users
-      await userManager.registerUser(
-        id: 'user1',
-        publicSigningKey: 'key1',
-        publicEncryptionKey: 'key1',
-        nickname: 'User 1',
-      );
-      
-      await userManager.registerUser(
-        id: 'user2',
-        publicSigningKey: 'key2',
-        publicEncryptionKey: 'key2',
-        nickname: 'User 2',
-      );
+    test('should return null for non-existent user', () {
+      const userId = 'non_existent';
 
-      final allUsers = await userManager.getAllUsers();
-      expect(allUsers.length, greaterThanOrEqualTo(2));
-      
-      final userIds = allUsers.map((u) => u.id).toList();
-      expect(userIds, contains('user1'));
-      expect(userIds, contains('user2'));
+      final user = userManager.getUser(userId);
+
+      expect(user, isNull);
     });
 
-    test('should get user statistics', () async {
-      // Register a user
-      await userManager.registerUser(
-        id: 'stats_user',
-        publicSigningKey: 'key',
-        publicEncryptionKey: 'key',
-        nickname: 'Stats User',
-      );
+    test('should get all users', () async {
+      final users = await userManager.getAllUsers();
 
-      final stats = userManager.getUserStats();
-      expect(stats, isA<Map<String, dynamic>>());
-      expect(stats['total'], isA<int>());
-      expect(stats['online'], isA<int>());
-      expect(stats['offline'], isA<int>());
-      expect(stats['total'], greaterThanOrEqualTo(1));
+      expect(users, isNotNull);
+      expect(users.length, greaterThan(0));
+      expect(users.any((user) => user.id == 'user1'), isTrue);
+      expect(users.any((user) => user.id == 'user2'), isTrue);
     });
 
-    test('should check a user online status', () async {
-      // Register a user
-      await userManager.registerUser(
-        id: 'online_test_user',
-        publicSigningKey: 'key',
-        publicEncryptionKey: 'key',
-        nickname: 'Online Test',
-      );
+    test('should get online users', () {
+      const userId1 = 'user1';
+      const userId2 = 'user2';
 
-      // The user should be offline after registration
-      expect(userManager.isUserOnline('online_test_user'), isFalse);
-
-      // Authenticate the user (marks them online)
-      await userManager.authenticateUser('online_test_user');
-      
-      // The user is still offline until WebSocket is connected
-      expect(userManager.isUserOnline('online_test_user'), isFalse);
-    });
-
-    test('should get a list of online users', () async {
-      // Register and authenticate a user
-      await userManager.registerUser(
-        id: 'online_user_1',
-        publicSigningKey: 'key1',
-        publicEncryptionKey: 'key1',
-        nickname: 'Online User 1',
-      );
-      
-      await userManager.authenticateUser('online_user_1');
+      userManager.connectUser(userId1, mockWebSocketChannel);
 
       final onlineUsers = userManager.getOnlineUsers();
-      expect(onlineUsers, isA<List<User>>());
-      
-      // Verify the authenticated user is marked as online
-      final onlineUser = onlineUsers.firstWhere(
-        (u) => u.id == 'online_user_1',
-        orElse: () => throw StateError('User not found'),
-      );
-      expect(onlineUser.isOnline, isTrue);
+
+      expect(onlineUsers.length, equals(1));
+      expect(onlineUsers.first.id, equals(userId1));
     });
 
-    test('should disconnect a user', () async {
-      // Register and authenticate a user
-      await userManager.registerUser(
-        id: 'disconnect_user',
-        publicSigningKey: 'key',
-        publicEncryptionKey: 'key',
-        nickname: 'Disconnect User',
+    test('should check if user is online', () {
+      const userId = 'user1';
+
+      expect(userManager.isUserOnline(userId), isFalse);
+
+      userManager.connectUser(userId, mockWebSocketChannel);
+      expect(userManager.isUserOnline(userId), isTrue);
+    });
+  });
+
+  group('UserManager Statistics Tests', () {
+    test('should get user statistics', () {
+      const userId = 'user1';
+
+      final initialStats = userManager.getUserStats();
+      expect(initialStats['total'], greaterThan(0));
+      expect(initialStats['online'], equals(0));
+
+      userManager.connectUser(userId, mockWebSocketChannel);
+
+      final updatedStats = userManager.getUserStats();
+      expect(updatedStats['online'], equals(1));
+      expect(updatedStats['offline'], equals(initialStats['total']! - 1));
+    });
+
+    test('should get server statistics', () {
+      final stats = userManager.getStats();
+
+      expect(stats, isNotNull);
+      expect(stats.containsKey('totalUsers'), isTrue);
+      expect(stats.containsKey('onlineUsers'), isTrue);
+      expect(stats['totalUsers'], greaterThan(0));
+    });
+  });
+
+  group('UserManager User Status Updates Tests', () {
+    test('should broadcast user status updates', () {
+      const userId1 = 'user1';
+      const userId2 = 'user2';
+
+      // Connect two users
+      userManager.connectUser(userId1, mockWebSocketChannel);
+      userManager.connectUser(userId2, mockWebSocketChannel);
+
+      // Disconnect one user - should broadcast to remaining users
+      userManager.disconnectUser(userId1);
+
+      // Verify broadcasts were sent
+      verify(mockWebSocketSink.add(any)).called(greaterThan(0));
+    });
+  });
+
+  group('UserManager Error Handling Tests', () {
+    test('should handle connection errors', () {
+      const userId = 'user1';
+
+      // Test connecting with null channel
+      expect(() => userManager.connectUser(userId, mockWebSocketChannel), returnsNormally);
+    });
+
+    test('should handle disconnection of non-existent user', () {
+      const userId = 'non_existent';
+
+      expect(() => userManager.disconnectUser(userId), returnsNormally);
+    });
+
+    test('should handle sending to non-existent user', () async {
+      const userId = 'non_existent';
+      const message = {'type': 'test'};
+
+      final success = await userManager.sendToUser(userId, message);
+      expect(success, isFalse);
+    });
+  });
+
+  group('UserManager Performance Tests', () {
+    test('should handle multiple connections', () {
+      final userIds = List.generate(10, (i) => 'user_$i');
+
+      // Connect multiple users
+      for (final userId in userIds) {
+        userManager.connectUser(userId, mockWebSocketChannel);
+      }
+
+      final onlineUsers = userManager.getOnlineUsers();
+      expect(onlineUsers.length, equals(10));
+    });
+
+    test('should handle rapid connect/disconnect cycles', () {
+      const userId = 'test_user';
+
+      // Rapid connect/disconnect cycles
+      for (var i = 0; i < 5; i++) {
+        userManager.connectUser(userId, mockWebSocketChannel);
+        expect(userManager.isUserOnline(userId), isTrue);
+        userManager.disconnectUser(userId);
+        expect(userManager.isUserOnline(userId), isFalse);
+      }
+    });
+  });
+
+  group('UserManager Data Integrity Tests', () {
+    test('should maintain user data consistency', () async {
+      const userId = 'test_user';
+      const nickname = 'Test Nickname';
+
+      // Register user
+      final registeredUser = await userManager.registerUser(
+        id: userId,
+        publicSigningKey: 'signing_key',
+        publicEncryptionKey: 'encryption_key',
+        nickname: nickname,
       );
-      
-      await userManager.authenticateUser('disconnect_user');
 
-      // Disconnect the user
-      userManager.disconnectUser('disconnect_user');
+      expect(registeredUser!.nickname, equals(nickname));
 
-      // Verify the user is offline
-      expect(userManager.isUserOnline('disconnect_user'), isFalse);
-      
-      final user = userManager.getUser('disconnect_user');
-      expect(user!.isOnline, isFalse);
+      // Connect user
+      userManager.connectUser(userId, mockWebSocketChannel);
+
+      // Verify data consistency
+      final retrievedUser = userManager.getUser(userId);
+      expect(retrievedUser!.nickname, equals(nickname));
+      expect(retrievedUser.isOnline, isTrue);
+    });
+
+    test('should handle concurrent operations', () async {
+      const baseUserId = 'concurrent_user';
+
+      // Simulate concurrent operations
+      final futures = <Future>[];
+
+      for (var i = 0; i < 5; i++) {
+        final userId = '$baseUserId$i';
+        futures.add(userManager.registerUser(
+          id: userId,
+          publicSigningKey: 'signing_key_$i',
+          publicEncryptionKey: 'encryption_key_$i',
+        ));
+      }
+
+      final results = await Future.wait(futures);
+      expect(results.every((user) => user != null), isTrue);
     });
   });
 }

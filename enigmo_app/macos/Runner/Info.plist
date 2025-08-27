@@ -28,5 +28,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs access to microphone for voice calls</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs access to camera for video calls</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app needs access to local network for peer-to-peer communication</string>
 </dict>
 </plist>

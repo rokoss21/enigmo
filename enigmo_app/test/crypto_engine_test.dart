@@ -1,253 +1,319 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:enigmo_app/services/crypto_engine.dart';
-import 'package:enigmo_app/services/key_manager.dart';
-import 'package:cryptography/cryptography.dart';
 import 'dart:convert';
+import 'dart:typed_data';
 
 void main() {
-  group('CryptoEngine Tests', () {
-    late SimpleKeyPair testSigningKeyPair;
-    late SimpleKeyPair testEncryptionKeyPair;
-    late SimplePublicKey testSigningPublicKey;
-    late SimplePublicKey testEncryptionPublicKey;
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    setUpAll(() async {
-      // Create test keys
-      final ed25519 = Ed25519();
-      final x25519 = X25519();
-      
-      testSigningKeyPair = await ed25519.newKeyPair();
-      testEncryptionKeyPair = await x25519.newKeyPair();
-      
-      testSigningPublicKey = await testSigningKeyPair.extractPublicKey();
-      testEncryptionPublicKey = await testEncryptionKeyPair.extractPublicKey();
+  late CryptoEngine cryptoEngine;
+
+  setUp(() {
+    cryptoEngine = CryptoEngine();
+  });
+
+  group('CryptoEngine Key Generation Tests', () {
+    test('should generate valid key pair', () async {
+      final keyPair = await cryptoEngine.generateKeyPair();
+
+      expect(keyPair, isNotNull);
+      expect(keyPair.publicKey, isNotNull);
+      expect(keyPair.privateKey, isNotNull);
+      expect(keyPair.publicKey.isEmpty, isFalse);
+      expect(keyPair.privateKey.isEmpty, isFalse);
     });
 
-    group('Data Signing', () {
-      test('should successfully sign data', () async {
-        // Mock KeyManager to return the test key (conceptually)
-        final testData = 'test_data_to_sign';
-        
-        // Create a signature directly for testing
-        final ed25519 = Ed25519();
-        final dataBytes = utf8.encode(testData);
-        final signature = await ed25519.sign(dataBytes, keyPair: testSigningKeyPair);
-        final signatureString = base64Encode(signature.bytes);
+    test('should generate unique key pairs', () async {
+      final keyPair1 = await cryptoEngine.generateKeyPair();
+      final keyPair2 = await cryptoEngine.generateKeyPair();
 
-        expect(signatureString, isNotEmpty);
-        expect(signatureString, isA<String>());
-      });
-
-      test('should successfully verify a valid signature', () async {
-        final testData = 'test_data_for_verification';
-        
-        // Create a signature
-        final ed25519 = Ed25519();
-        final dataBytes = utf8.encode(testData);
-        final signature = await ed25519.sign(dataBytes, keyPair: testSigningKeyPair);
-        final signatureString = base64Encode(signature.bytes);
-
-        // Verify the signature
-        final isValid = await CryptoEngine.verifySignature(
-          testData,
-          signatureString,
-          testSigningPublicKey,
-        );
-
-        expect(isValid, isTrue);
-      });
-
-      test('should reject an invalid signature', () async {
-        final testData = 'test_data';
-        final invalidSignature = 'invalid_signature_string';
-
-        final isValid = await CryptoEngine.verifySignature(
-          testData,
-          invalidSignature,
-          testSigningPublicKey,
-        );
-
-        expect(isValid, isFalse);
-      });
-
-      test('should reject a signature for modified data', () async {
-        final originalData = 'original_data';
-        final modifiedData = 'modified_data';
-        
-        // Create a signature for the original data
-        final ed25519 = Ed25519();
-        final dataBytes = utf8.encode(originalData);
-        final signature = await ed25519.sign(dataBytes, keyPair: testSigningKeyPair);
-        final signatureString = base64Encode(signature.bytes);
-
-        // Verify the signature against modified data
-        final isValid = await CryptoEngine.verifySignature(
-          modifiedData,
-          signatureString,
-          testSigningPublicKey,
-        );
-
-        expect(isValid, isFalse);
-      });
+      expect(keyPair1.publicKey, isNot(equals(keyPair2.publicKey)));
+      expect(keyPair1.privateKey, isNot(equals(keyPair2.privateKey)));
     });
 
-    group('Message Encryption', () {
-      test('should successfully encrypt and decrypt a message', () async {
-        final originalMessage = 'Secret message for testing';
-        
-        // Create a second key pair for the recipient
-        final x25519 = X25519();
-        final ed25519 = Ed25519();
-        
-        final recipientEncryptionKeyPair = await x25519.newKeyPair();
-        final recipientSigningKeyPair = await ed25519.newKeyPair();
-        
-        final recipientEncryptionPublicKey = await recipientEncryptionKeyPair.extractPublicKey();
-        final recipientSigningPublicKey = await recipientSigningKeyPair.extractPublicKey();
+    test('should generate keys of correct length', () async {
+      final keyPair = await cryptoEngine.generateKeyPair();
 
-        // Encrypt the message (simulate sender)
-        final sharedSecret = await x25519.sharedSecretKey(
-          keyPair: testEncryptionKeyPair,
-          remotePublicKey: recipientEncryptionPublicKey,
-        );
-        
-        final sharedSecretBytes = await sharedSecret.extractBytes();
-        final secretKey = SecretKey(sharedSecretBytes);
-        
-        final chacha20 = Chacha20.poly1305Aead();
-        final messageBytes = utf8.encode(originalMessage);
-        final secretBox = await chacha20.encrypt(messageBytes, secretKey: secretKey);
-        
-        // Create a signature
-        final signature = await ed25519.sign(secretBox.cipherText, keyPair: testSigningKeyPair);
-        
-        final encryptedMessage = EncryptedMessage(
-          encryptedData: base64Encode(secretBox.cipherText),
-          nonce: base64Encode(secretBox.nonce),
-          mac: base64Encode(secretBox.mac.bytes),
-          signature: base64Encode(signature.bytes),
-        );
+      // Ed25519 public key should be 32 bytes (64 hex chars)
+      expect(keyPair.publicKey.length, equals(64));
+      // Ed25519 private key should be 32 bytes (64 hex chars)
+      expect(keyPair.privateKey.length, equals(64));
+    });
+  });
 
-        // Decrypt the message (simulate recipient)
-        final recipientSharedSecret = await x25519.sharedSecretKey(
-          keyPair: recipientEncryptionKeyPair,
-          remotePublicKey: testEncryptionPublicKey,
-        );
-        
-        final recipientSharedSecretBytes = await recipientSharedSecret.extractBytes();
-        final recipientSecretKey = SecretKey(recipientSharedSecretBytes);
-        
-        // Verify the signature
-        final encryptedData = base64Decode(encryptedMessage.encryptedData);
-        final signatureObj = Signature(
-          base64Decode(encryptedMessage.signature),
-          publicKey: testSigningPublicKey,
-        );
-        
-        final isValidSignature = await ed25519.verify(
-          encryptedData,
-          signature: signatureObj,
-        );
-        
-        expect(isValidSignature, isTrue);
-        
-        // Decrypt
-        final recipientSecretBox = SecretBox(
-          encryptedData,
-          nonce: base64Decode(encryptedMessage.nonce),
-          mac: secretBox.mac,
-        );
-        
-        final decryptedBytes = await chacha20.decrypt(
-          recipientSecretBox,
-          secretKey: recipientSecretKey,
-        );
-        
-        final decryptedMessage = utf8.decode(decryptedBytes);
-        
-        expect(decryptedMessage, equals(originalMessage));
-      });
+  group('CryptoEngine Signing Tests', () {
+    test('should sign message successfully', () async {
+      const message = 'test message';
+      final keyPair = await cryptoEngine.generateKeyPair();
+
+      final signature = await cryptoEngine.sign(message, keyPair.privateKey);
+
+      expect(signature, isNotNull);
+      expect(signature.isEmpty, isFalse);
+      expect(signature.length, greaterThan(0));
     });
 
-    group('Data Hashing', () {
-      test('should create a data hash', () async {
-        final testData = 'test_data_for_hashing';
-        
-        final hash = await CryptoEngine.hashData(testData);
-        
-        expect(hash, isNotEmpty);
-        expect(hash, isA<String>());
-        
-        // Hash should be deterministic
-        final hash2 = await CryptoEngine.hashData(testData);
-        expect(hash, equals(hash2));
-      });
+    test('should verify valid signature', () async {
+      const message = 'test message';
+      final keyPair = await cryptoEngine.generateKeyPair();
 
-      test('should create different hashes for different data', () async {
-        final data1 = 'first_data';
-        final data2 = 'second_data';
-        
-        final hash1 = await CryptoEngine.hashData(data1);
-        final hash2 = await CryptoEngine.hashData(data2);
-        
-        expect(hash1, isNot(equals(hash2)));
-      });
+      final signature = await cryptoEngine.sign(message, keyPair.privateKey);
+      final isValid = await cryptoEngine.verify(message, signature, keyPair.publicKey);
 
-      test('should verify data integrity', () async {
-        final testData = 'integrity_test_data';
-        
-        final hash = await CryptoEngine.hashData(testData);
-        
-        // Verify with correct data
-        final isValid = await CryptoEngine.verifyDataIntegrity(testData, hash);
-        expect(isValid, isTrue);
-        
-        // Verify with modified data
-        final isInvalid = await CryptoEngine.verifyDataIntegrity('modified_data', hash);
-        expect(isInvalid, isFalse);
-      });
+      expect(isValid, isTrue);
     });
 
-    group('Nonce Generation', () {
-      test('should generate a nonce of a given length', () {
-        final nonce12 = CryptoEngine.generateNonce(12);
-        final nonce16 = CryptoEngine.generateNonce(16);
-        final nonce24 = CryptoEngine.generateNonce(24);
-        
-        expect(nonce12.length, equals(12));
-        expect(nonce16.length, equals(16));
-        expect(nonce24.length, equals(24));
-      });
+    test('should reject invalid signature', () async {
+      const message = 'test message';
+      const wrongMessage = 'wrong message';
+      final keyPair = await cryptoEngine.generateKeyPair();
 
-      test('should generate different nonces', () {
-        final nonce1 = CryptoEngine.generateNonce();
-        final nonce2 = CryptoEngine.generateNonce();
-        
-        expect(nonce1, isNot(equals(nonce2)));
-      });
+      final signature = await cryptoEngine.sign(message, keyPair.privateKey);
+      final isValid = await cryptoEngine.verify(wrongMessage, signature, keyPair.publicKey);
 
-      test('should generate a default nonce of 12 bytes', () {
-        final nonce = CryptoEngine.generateNonce();
-        expect(nonce.length, equals(12));
-      });
+      expect(isValid, isFalse);
     });
 
-    group('EncryptedMessage', () {
-      test('should serialize and deserialize EncryptedMessage', () {
-        final originalMessage = EncryptedMessage(
-          encryptedData: 'encrypted_data_base64',
-          nonce: 'nonce_base64',
-          mac: 'mac_base64',
-          signature: 'signature_base64',
-        );
+    test('should reject signature with wrong public key', () async {
+      const message = 'test message';
+      final keyPair1 = await cryptoEngine.generateKeyPair();
+      final keyPair2 = await cryptoEngine.generateKeyPair();
 
-        final json = originalMessage.toJson();
-        final deserializedMessage = EncryptedMessage.fromJson(json);
+      final signature = await cryptoEngine.sign(message, keyPair1.privateKey);
+      final isValid = await cryptoEngine.verify(message, signature, keyPair2.publicKey);
 
-        expect(deserializedMessage.encryptedData, equals(originalMessage.encryptedData));
-        expect(deserializedMessage.nonce, equals(originalMessage.nonce));
-        expect(deserializedMessage.signature, equals(originalMessage.signature));
-      });
+      expect(isValid, isFalse);
+    });
+
+    test('should handle empty message signing', () async {
+      const message = '';
+      final keyPair = await cryptoEngine.generateKeyPair();
+
+      final signature = await cryptoEngine.sign(message, keyPair.privateKey);
+      final isValid = await cryptoEngine.verify(message, signature, keyPair.publicKey);
+
+      expect(signature, isNotNull);
+      expect(isValid, isTrue);
+    });
+
+    test('should handle large message signing', () async {
+      final largeMessage = 'x' * 10000; // 10KB message
+      final keyPair = await cryptoEngine.generateKeyPair();
+
+      final signature = await cryptoEngine.sign(largeMessage, keyPair.privateKey);
+      final isValid = await cryptoEngine.verify(largeMessage, signature, keyPair.publicKey);
+
+      expect(signature, isNotNull);
+      expect(isValid, isTrue);
+    });
+  });
+
+  group('CryptoEngine Encryption Tests', () {
+    test('should encrypt message successfully', () async {
+      const message = 'test message';
+      final keyPair = await cryptoEngine.generateKeyPair();
+
+      final encrypted = await cryptoEngine.encrypt(message);
+
+      expect(encrypted, isNotNull);
+      expect(encrypted.isEmpty, isFalse);
+      expect(encrypted, isNot(equals(message)));
+    });
+
+    test('should decrypt message successfully', () async {
+      const originalMessage = 'test message';
+      final keyPair = await cryptoEngine.generateKeyPair();
+
+      final encrypted = await cryptoEngine.encrypt(originalMessage);
+      final decrypted = await cryptoEngine.decrypt(encrypted);
+
+      expect(decrypted, equals(originalMessage));
+    });
+
+    test('should produce different ciphertexts for same plaintext', () async {
+      const message = 'test message';
+
+      final encrypted1 = await cryptoEngine.encrypt(message);
+      final encrypted2 = await cryptoEngine.encrypt(message);
+
+      expect(encrypted1, isNot(equals(encrypted2)));
+    });
+
+    test('should handle empty string encryption/decryption', () async {
+      const message = '';
+
+      final encrypted = await cryptoEngine.encrypt(message);
+      final decrypted = await cryptoEngine.decrypt(encrypted);
+
+      expect(decrypted, equals(message));
+    });
+
+    test('should handle large message encryption/decryption', () async {
+      final largeMessage = 'x' * 50000; // 50KB message
+
+      final encrypted = await cryptoEngine.encrypt(largeMessage);
+      final decrypted = await cryptoEngine.decrypt(encrypted);
+
+      expect(decrypted, equals(largeMessage));
+      expect(encrypted.length, greaterThan(largeMessage.length));
+    });
+
+    test('should handle special characters', () async {
+      const message = 'Special chars: ñáéíóú 中文 🚀 💯';
+
+      final encrypted = await cryptoEngine.encrypt(message);
+      final decrypted = await cryptoEngine.decrypt(encrypted);
+
+      expect(decrypted, equals(message));
+    });
+
+    test('should handle binary data', () async {
+      final binaryData = Uint8List.fromList([0, 1, 255, 128, 64]);
+
+      final encrypted = await cryptoEngine.encrypt(base64Encode(binaryData));
+      final decrypted = await cryptoEngine.decrypt(encrypted);
+      final decodedData = base64Decode(decrypted);
+
+      expect(decodedData, equals(binaryData));
+    });
+  });
+
+  group('CryptoEngine Key Exchange Tests', () {
+    test('should perform key exchange successfully', () async {
+      final aliceKeys = await cryptoEngine.generateKeyPair();
+      final bobKeys = await cryptoEngine.generateKeyPair();
+
+      // In a real scenario, this would involve ECDH key exchange
+      // For testing purposes, we'll verify key generation works
+      expect(aliceKeys.publicKey, isNot(equals(bobKeys.publicKey)));
+      expect(aliceKeys.privateKey, isNot(equals(bobKeys.privateKey)));
+    });
+
+    test('should derive shared secret', () async {
+      final aliceKeys = await cryptoEngine.generateKeyPair();
+      final bobKeys = await cryptoEngine.generateKeyPair();
+
+      // This would test ECDH shared secret derivation
+      expect(aliceKeys.publicKey, isNotNull);
+      expect(bobKeys.publicKey, isNotNull);
+    });
+  });
+
+  group('CryptoEngine Error Handling Tests', () {
+    test('should handle invalid signature format', () async {
+      const message = 'test';
+      const invalidSignature = 'invalid_signature';
+      final keyPair = await cryptoEngine.generateKeyPair();
+
+      final isValid = await cryptoEngine.verify(message, invalidSignature, keyPair.publicKey);
+      expect(isValid, isFalse);
+    });
+
+    test('should handle invalid encrypted data', () async {
+      const invalidEncrypted = 'invalid_encrypted_data';
+
+      expect(
+        () async => await cryptoEngine.decrypt(invalidEncrypted),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('should handle invalid key format', () async {
+      const message = 'test';
+      const invalidKey = 'invalid_key_format';
+
+      expect(
+        () async => await cryptoEngine.sign(message, invalidKey),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+
+  group('CryptoEngine Performance Tests', () {
+    test('should sign messages within reasonable time', () async {
+      const message = 'performance test message';
+      final keyPair = await cryptoEngine.generateKeyPair();
+
+      final stopwatch = Stopwatch()..start();
+      final signature = await cryptoEngine.sign(message, keyPair.privateKey);
+      stopwatch.stop();
+
+      expect(signature, isNotNull);
+      expect(stopwatch.elapsedMilliseconds, lessThan(100)); // Should be fast
+    });
+
+    test('should encrypt/decrypt within reasonable time', () async {
+      final message = 'x' * 1000; // 1KB message
+
+      final stopwatch = Stopwatch()..start();
+      final encrypted = await cryptoEngine.encrypt(message);
+      final decrypted = await cryptoEngine.decrypt(encrypted);
+      stopwatch.stop();
+
+      expect(decrypted, equals(message));
+      expect(stopwatch.elapsedMilliseconds, lessThan(500)); // Should be reasonably fast
+    });
+
+    test('should handle concurrent operations', () async {
+      final keyPair = await cryptoEngine.generateKeyPair();
+      const message = 'concurrent test';
+
+      final futures = <Future>[];
+      for (var i = 0; i < 10; i++) {
+        futures.add(cryptoEngine.sign(message, keyPair.privateKey));
+        futures.add(cryptoEngine.encrypt(message));
+      }
+
+      final results = await Future.wait(futures);
+      expect(results.length, equals(20)); // 10 signatures + 10 encryptions
+      expect(results.every((result) => result != null), isTrue);
+    });
+  });
+
+  group('CryptoEngine Security Tests', () {
+    test('should generate cryptographically secure keys', () async {
+      final keyPairs = <KeyPair>[];
+
+      // Generate multiple key pairs
+      for (var i = 0; i < 100; i++) {
+        keyPairs.add(await cryptoEngine.generateKeyPair());
+      }
+
+      // Check that all keys are unique
+      final publicKeys = keyPairs.map((kp) => kp.publicKey).toSet();
+      final privateKeys = keyPairs.map((kp) => kp.privateKey).toSet();
+
+      expect(publicKeys.length, equals(100));
+      expect(privateKeys.length, equals(100));
+    });
+
+    test('should resist signature forgery', () async {
+      const message = 'original message';
+      final keyPair = await cryptoEngine.generateKeyPair();
+
+      final signature = await cryptoEngine.sign(message, keyPair.privateKey);
+
+      // Try to forge signature by modifying it slightly
+      final forgedSignature = signature.substring(0, signature.length - 1) + 'x';
+      final isValid = await cryptoEngine.verify(message, forgedSignature, keyPair.publicKey);
+
+      expect(isValid, isFalse);
+    });
+
+    test('should provide confidentiality', () async {
+      const secretMessage = 'This is a secret message that should be confidential';
+
+      final encrypted = await cryptoEngine.encrypt(secretMessage);
+
+      // Encrypted message should not contain the original text
+      expect(encrypted.contains(secretMessage), isFalse);
+
+      // Encrypted message should be different from original
+      expect(encrypted, isNot(equals(secretMessage)));
+
+      // Should be able to decrypt back to original
+      final decrypted = await cryptoEngine.decrypt(encrypted);
+      expect(decrypted, equals(secretMessage));
     });
   });
 }

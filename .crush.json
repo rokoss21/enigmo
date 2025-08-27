@@ -1,0 +1,22 @@
+{
+  "$schema": "https://charm.land/crush.json",
+  "providers": {
+    "openrouter": {
+      "type": "openai",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key": "$OPENROUTER_API_KEY",
+      "models": [
+        {
+          "id": "x-ai/grok-code-fast-1",
+          "name": "Grok Code Fast 1",
+          "cost_per_1m_in": 0.20,
+          "cost_per_1m_out": 1.50,
+          "context_window": 256000,
+          "default_max_tokens": 10000,
+          "can_reason": true,
+          "supports_attachments": true
+        }
+      ]
+    }
+  }
+}

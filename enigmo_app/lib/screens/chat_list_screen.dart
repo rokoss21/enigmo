@@ -5,11 +5,14 @@ import '../models/chat.dart';
 import '../models/message.dart';
 import '../services/network_service.dart';
 import '../services/key_manager.dart';
+import '../services/audio_call_service.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
-  const ChatListScreen({super.key});
+  final AudioCallService audioCallService;
+  
+  const ChatListScreen({super.key, required this.audioCallService});
 
   @override
   State<ChatListScreen> createState() => _ChatListScreenState();
@@ -191,9 +194,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
       });
       
       // Listen for new chat notifications
-      _networkService.newChatNotifications.listen((userId) {
-        print('INFO ChatListScreen: New chat notification: $userId');
-        _handleNewChatNotification({'userId': userId});
+      _networkService.newChatNotifications.listen((dynamic notificationData) {
+        print('INFO ChatListScreen: New chat notification: $notificationData');
+        if (notificationData is Map<String, dynamic>) {
+          _handleNewChatNotification(notificationData);
+        } else if (notificationData is String) {
+          // Backward compatibility
+          _handleNewChatNotification({'userId': notificationData});
+        }
       });
       
       // Listen for user status updates
@@ -556,7 +564,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ChatScreen(chat: chat),
+            builder: (context) => ChatScreen(chat: chat, audioCallService: widget.audioCallService),
           ),
         );
         // Returned from chat — reset unread counter
@@ -964,7 +972,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => ChatScreen(chat: existingChat),
+          builder: (context) => ChatScreen(chat: existingChat, audioCallService: widget.audioCallService),
         ),
       );
     }
@@ -984,9 +992,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
       }
 
       // Check if a chat with this user already exists
-      final existingChatIndex = _chats.indexWhere((chat) => 
+      final existingChatIndex = _chats.indexWhere((chat) =>
         chat.participants.contains(userId));
-      
+
       if (existingChatIndex != -1) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -994,12 +1002,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
             backgroundColor: Colors.orange,
           ),
         );
-        
+
         // Navigate to the existing chat
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ChatScreen(chat: _chats[existingChatIndex]),
+            builder: (context) => ChatScreen(chat: _chats[existingChatIndex], audioCallService: widget.audioCallService),
           ),
         );
         return;
@@ -1007,7 +1015,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
       // Send a request to the server to add the user to the chat
       await _networkService.addUserToChat(userId);
-      
+
       // Create a local chat for the initiator
       final targetUser = Chat(
         id: userId,
@@ -1036,7 +1044,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => ChatScreen(chat: targetUser),
+          builder: (context) => ChatScreen(chat: targetUser, audioCallService: widget.audioCallService),
         ),
       );
 
@@ -1050,4 +1058,5 @@ class _ChatListScreenState extends State<ChatListScreen> {
       );
     }
   }
+
 }

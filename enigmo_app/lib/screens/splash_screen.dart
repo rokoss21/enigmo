@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'chat_list_screen.dart';
+import 'package:enigmo_app/services/audio_call_service.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  final AudioCallService audioCallService;
+  
+  const SplashScreen({super.key, required this.audioCallService});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -41,7 +44,7 @@ class _SplashScreenState extends State<SplashScreen>
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           transitionDuration: const Duration(milliseconds: 550),
-          pageBuilder: (_, __, ___) => const ChatListScreen(),
+          pageBuilder: (_, __, ___) => ChatListScreen(audioCallService: widget.audioCallService),
           transitionsBuilder: (_, anim, __, child) {
             final curved = CurvedAnimation(parent: anim, curve: Curves.easeInOutCubic);
             return FadeTransition(opacity: curved, child: child);

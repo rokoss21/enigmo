@@ -58,7 +58,7 @@ lint: ## Run static analysis
 # Development
 dev-server: ## Start server in development mode
 	@echo "🖥️  Starting Enigmo server..."
-	cd enigmo_server && dart run bin/anongram_server.dart --host localhost --port 8080 --debug
+	cd enigmo_server && dart run bin/anongram_server.dart --host localhost --port 8081 --debug
 
 dev-app-ios: ## Start Flutter app on iOS
 	@echo "📱 Starting Enigmo app on iOS..."
@@ -129,11 +129,11 @@ git-setup: ## Setup git hooks and configuration
 # Health checks
 health-check: ## Check if server is running and healthy
 	@echo "🏥 Checking server health..."
-	curl -f http://localhost:8080/api/health || echo "❌ Server not running"
+	curl -f http://localhost:8081/api/health || echo "❌ Server not running"
 
 stats: ## Show server statistics
 	@echo "📊 Server statistics:"
-	curl -s http://localhost:8080/api/stats | python3 -m json.tool
+	curl -s http://localhost:8081/api/stats | python3 -m json.tool
 
 # Development tools
 deps-update: ## Update all dependencies

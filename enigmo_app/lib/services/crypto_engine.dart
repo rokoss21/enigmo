@@ -337,4 +337,38 @@ class CryptoEngine {
     final actualHash = await hashData(data);
     return actualHash == expectedHash;
   }
+
+  /// Simple encrypt method for signaling data
+  static Future<String> encrypt(String data) async {
+    try {
+      final keyPair = await KeyManager.getEncryptionKeyPair();
+      if (keyPair == null) {
+        throw Exception('Encryption key not found');
+      }
+
+      final publicKey = await keyPair.extractPublicKey();
+      final encrypted = await encryptMessage(data, publicKey);
+      return jsonEncode(encrypted.toJson());
+    } catch (e) {
+      print('ERROR CryptoEngine.encrypt: $e');
+      throw Exception('Encryption error: $e');
+    }
+  }
+
+  /// Simple decrypt method for signaling data
+  static Future<String> decrypt(String encryptedData) async {
+    try {
+      final encrypted = EncryptedMessage.fromJson(jsonDecode(encryptedData));
+      final keyPair = await KeyManager.getEncryptionKeyPair();
+      if (keyPair == null) {
+        throw Exception('Decryption key not found');
+      }
+
+      final publicKey = await keyPair.extractPublicKey();
+      return await decryptMessage(encrypted, publicKey, publicKey);
+    } catch (e) {
+      print('ERROR CryptoEngine.decrypt: $e');
+      throw Exception('Decryption error: $e');
+    }
+  }
 }

@@ -571,7 +571,7 @@ void main() {
         
         // System should still be responsive
         final stats = messageManager.getMessageStats();
-        expect(stats['totalMessages'], equals(10000));
+        expect(stats['total'], equals(10000));
       });
 
       test('should handle connection cleanup after abrupt disconnections', () async {
@@ -604,10 +604,10 @@ void main() {
         
         // All users should be marked as offline
         expect(userManager.getOnlineUsers().length, equals(0));
-        
+
         final stats = userManager.getUserStats();
         expect(stats['online'], equals(0));
-        expect(stats['offline'], equals(100));
+        expect(stats['offline'], equals(102)); // 100 test users + 2 default users (Alice, Bob)
       });
     });
 

@@ -166,23 +166,25 @@ class UserManager {
 
   Future<bool> sendToUser(String userId, Map<String, dynamic> message) async {
     print('DEBUG UserManager.sendToUser: Attempting to send message to user $userId');
-    print('DEBUG UserManager.sendToUser: Message: $message');
-    
+    print('DEBUG UserManager.sendToUser: Message type: ${message['type']}');
+    print('DEBUG UserManager.sendToUser: Active channels: ${_userChannels.length}');
+
     final channel = _userChannels[userId];
     if (channel == null) {
       print('DEBUG UserManager.sendToUser: Channel for user $userId not found');
+      print('DEBUG UserManager.sendToUser: Available users: ${_userChannels.keys.join(", ")}');
       return false;
     }
 
     try {
       final jsonMessage = jsonEncode(message);
+      print('DEBUG UserManager.sendToUser: Sending JSON message, length: ${jsonMessage.length}');
       channel.sink.add(jsonMessage);
       print('DEBUG UserManager.sendToUser: Message successfully sent to user $userId');
       return true;
     } catch (e) {
-      print('DEBUG UserManager.sendToUser: Error sending message to user $userId: $e');
-      print('ERROR: Error sending message to user $userId: $e');
-      
+      print('ERROR UserManager.sendToUser: Error sending message to user $userId: $e');
+
       // Remove the faulty connection
       disconnectUser(userId);
       return false;

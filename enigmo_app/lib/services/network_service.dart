@@ -92,7 +92,7 @@ class NetworkService {
   }
 
   NetworkService._internal();
-  static const String _defaultServerUrl = 'ws://localhost:8080/ws';
+  static const String _defaultServerUrl = 'wss://193.233.206.172:8081/ws';
   
   WebSocketChannel? _channel;
   // Single broadcast stream for all subscribers
@@ -173,26 +173,46 @@ class NetworkService {
   Future<bool> resetSession() async {
     try {
       print('DEBUG NetworkService.resetSession: start');
-      // Disconnect and clear local structures
-      disconnect();
+
+      // Clear local structures first
       _inMemoryByPeer.clear();
       _pendingByReceiver.clear();
       _onlineUsers.clear();
       _publicEncKeys.clear();
       _publicSignKeys.clear();
       _userId = null;
+
       // Delete keys and userId in storage
       await KeyManager.deleteUserKeys();
+
+      // Disconnect existing connection
+      disconnect();
+
       // Allow connect() to perform ephemeral cleanup again just in case
       _ephemeralInitDone = false;
 
       // New connection and registration/authentication
+      print('DEBUG NetworkService.resetSession: establishing new connection');
       final connected = await connect();
-      if (!connected) return false;
+      if (!connected) {
+        print('DEBUG NetworkService.resetSession: connection failed');
+        return false;
+      }
+
+      // Give the connection a moment to stabilize
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      print('DEBUG NetworkService.resetSession: registering new user');
       final registeredId = await registerUser();
-      if (registeredId == null) return false;
-      final authed = await authenticate();
-      return authed;
+      if (registeredId == null) {
+        print('DEBUG NetworkService.resetSession: registration failed');
+        return false;
+      }
+
+      // After successful registration, the user is already authenticated
+      // No need for separate authentication step
+      print('DEBUG NetworkService.resetSession: session reset successful');
+      return true;
     } catch (e) {
       print('DEBUG NetworkService.resetSession: error: $e');
       return false;
@@ -256,22 +276,32 @@ class NetworkService {
       // Allow explicit override via query: ?ws=ws://host:port/ws
       final wsOverride = Uri.base.queryParameters['ws'];
       if (wsOverride != null && wsOverride.isNotEmpty) {
+        print('DEBUG NetworkService._resolveServerUrl: Using explicit override: $wsOverride');
         return wsOverride;
       }
 
       // Or port override via ?wsPort=NNNN
       final portParam = Uri.base.queryParameters['wsPort'];
-      final port = int.tryParse(portParam ?? '') ?? 8080;
+      final port = int.tryParse(portParam ?? '') ?? 8081; // Changed default port to 8081
 
       // On web use the page host. If it's 0.0.0.0 or empty, use localhost
       var host = Uri.base.host;
       if (host.isEmpty || host == '0.0.0.0') {
         host = 'localhost';
       }
+
+      // For Chrome debugging, if running on localhost, try 127.0.0.1
+      if (host == 'localhost') {
+        host = '127.0.0.1';
+      }
+
       final scheme = Uri.base.scheme == 'https' ? 'wss' : 'ws';
-      return '$scheme://$host:$port/ws';
+      final url = '$scheme://$host:$port/ws';
+      print('DEBUG NetworkService._resolveServerUrl: Resolved URL for web: $url');
+      return url;
     } else {
       // On mobile/desktop keep localhost by default
+      print('DEBUG NetworkService._resolveServerUrl: Using default URL for mobile: $_defaultServerUrl');
       return _defaultServerUrl;
     }
   }
@@ -291,7 +321,8 @@ class NetworkService {
         }
       }
       final url = serverUrl ?? _resolveServerUrl();
-      print('Connecting to server: $url');
+      print('DEBUG NetworkService.connect: Attempting to connect to server: $url');
+      print('DEBUG NetworkService.connect: Running on ${kIsWeb ? "web" : "mobile/desktop"} platform');
       
       _manualDisconnect = false; // Explicit connect cancels manual disconnect flag
       _channel = WebSocketChannel.connect(Uri.parse(url));
@@ -342,7 +373,12 @@ class NetworkService {
   /// Register a new user
   Future<String?> registerUser({String? nickname}) async {
     if (!_isConnected || _channel == null) {
-      throw Exception('No connection to server');
+      print('DEBUG NetworkService.registerUser: No connection, attempting to connect first');
+      final connected = await connect();
+      if (!connected) {
+        throw Exception('No connection to server');
+      }
+      await Future.delayed(const Duration(milliseconds: 100)); // Give connection time to stabilize
     }
 
     try {
@@ -390,7 +426,12 @@ class NetworkService {
   /// Authenticate the user
   Future<bool> authenticate() async {
     if (!_isConnected || _channel == null) {
-      throw Exception('No connection to server');
+      print('DEBUG NetworkService.authenticate: No connection, attempting to connect first');
+      final connected = await connect();
+      if (!connected) {
+        throw Exception('No connection to server');
+      }
+      await Future.delayed(const Duration(milliseconds: 100)); // Give connection time to stabilize
     }
 
     try {
@@ -585,14 +626,16 @@ class NetworkService {
     try {
       final jsonData = jsonDecode(data);
       print('DEBUG NetworkService._handleServerMessage: Parsed JSON: $jsonData');
-      
+
       final type = jsonData['type'];
-      
+      print('DEBUG NetworkService._handleServerMessage: Message type: $type');
+
       switch (type) {
         case 'new_message':
           print('DEBUG NetworkService: Received new_message');
           // Server sends { type: 'new_message', message: {...} }
           final payload = (jsonData['message'] as Map<String, dynamic>?) ?? (jsonData['data'] as Map<String, dynamic>?) ?? jsonData;
+          print('DEBUG NetworkService: new_message payload: $payload');
           _handleNewMessageAsync(payload);
           break;
         case 'offline_message':
@@ -629,9 +672,37 @@ class NetworkService {
           final userId = jsonData['user_id'] as String?;
           final nickname = jsonData['nickname'] as String?;
           if (userId != null) {
+            // Send the full notification data to match what ChatListScreen expects
+            final notificationData = {
+              'userId': userId,
+              'nickname': nickname,
+              'isInitiator': false, // This is the recipient, not the initiator
+              'isOnline': true, // Assume online since they just connected
+              'lastSeen': DateTime.now().toIso8601String(),
+            };
             _newChatController.add(userId);
             print('DEBUG NetworkService: Sent a new chat notification for $userId');
           }
+          break;
+        case 'call_offer':
+          print('DEBUG NetworkService: Received call_offer');
+          print('DEBUG NetworkService: call_offer data: $jsonData');
+          _handleCallOffer(jsonData);
+          break;
+        case 'call_answer':
+          print('DEBUG NetworkService: Received call_answer');
+          print('DEBUG NetworkService: call_answer data: $jsonData');
+          _handleCallAnswer(jsonData);
+          break;
+        case 'call_candidate':
+          print('DEBUG NetworkService: Received call_candidate');
+          print('DEBUG NetworkService: call_candidate data: $jsonData');
+          _handleCallCandidate(jsonData);
+          break;
+        case 'call_end':
+          print('DEBUG NetworkService: Received call_end');
+          print('DEBUG NetworkService: call_end data: $jsonData');
+          _handleCallEnd(jsonData);
           break;
         case 'add_to_chat_success':
           print('DEBUG NetworkService: Received add_to_chat_success');
@@ -1109,6 +1180,85 @@ class NetworkService {
   void setLifecycleService(dynamic lifecycleService) {
     _lifecycleService = lifecycleService;
     print('DEBUG NetworkService: Lifecycle service integrated for background notifications');
+  }
+
+  /// Send WebRTC signaling message
+  void send(String type, Map<String, dynamic> data) {
+    if (!_isConnected || _channel == null) {
+      print('NetworkService.send: Not connected');
+      return;
+    }
+
+    final message = {
+      'type': type,
+      ...data,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
+    _channel!.sink.add(jsonEncode(message));
+  }
+
+  // Map to store message handlers
+  final Map<String, Function(Map<String, dynamic>)> _messageHandlers = {};
+
+  /// Register message handler for specific message types
+  void onMessage(String messageType, Function(Map<String, dynamic>) handler) {
+    _messageHandlers[messageType] = handler;
+    print('NetworkService.onMessage: Registered handler for $messageType');
+  }
+
+  /// Handle WebRTC call offer
+  void _handleCallOffer(Map<String, dynamic> data) {
+    final handler = _messageHandlers['call_offer'];
+    if (handler != null) {
+      print('DEBUG NetworkService._handleCallOffer: Calling handler with data: $data');
+      handler(data);
+    } else {
+      print('DEBUG NetworkService._handleCallOffer: No handler registered for call_offer');
+    }
+  }
+
+  /// Handle WebRTC call answer
+  void _handleCallAnswer(Map<String, dynamic> data) {
+    final handler = _messageHandlers['call_answer'];
+    if (handler != null) {
+      print('DEBUG NetworkService._handleCallAnswer: Calling handler with data: $data');
+      handler(data);
+    } else {
+      print('DEBUG NetworkService._handleCallAnswer: No handler registered for call_answer');
+    }
+  }
+
+  /// Handle WebRTC ICE candidate
+  void _handleCallCandidate(Map<String, dynamic> data) {
+    final handler = _messageHandlers['call_candidate'];
+    if (handler != null) {
+      print('DEBUG NetworkService._handleCallCandidate: Calling handler with data: $data');
+      handler(data);
+    } else {
+      print('DEBUG NetworkService._handleCallCandidate: No handler registered for call_candidate');
+    }
+  }
+
+  /// Handle WebRTC call end
+  void _handleCallEnd(Map<String, dynamic> data) {
+    final handler = _messageHandlers['call_end'];
+    if (handler != null) {
+      print('DEBUG NetworkService._handleCallEnd: Calling handler with data: $data');
+      handler(data);
+    } else {
+      print('DEBUG NetworkService._handleCallEnd: No handler registered for call_end');
+    }
+  }
+
+  /// Encrypt data using CryptoEngine
+  Future<String> encrypt(String data) async {
+    return await CryptoEngine.encrypt(data);
+  }
+
+  /// Decrypt data using CryptoEngine
+  Future<String> decrypt(String encryptedData) async {
+    return await CryptoEngine.decrypt(encryptedData);
   }
 }
 

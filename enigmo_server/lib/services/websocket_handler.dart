@@ -13,13 +13,41 @@ import 'message_manager.dart';
 import 'auth_service.dart';
 
 
+/// Call state model
+class CallState {
+  final String id;
+  final String callerId;
+  final String calleeId;
+  CallStatus status;
+  final DateTime startTime;
+  DateTime? endTime;
+
+  CallState({
+    required this.id,
+    required this.callerId,
+    required this.calleeId,
+    required this.status,
+    required this.startTime,
+    this.endTime,
+  });
+}
+
+enum CallStatus {
+  initiated,
+  connected,
+  ended,
+}
+
 /// WebSocket connections handler
 class WebSocketHandler {
   final Logger _logger = Logger();
   final UserManager _userManager;
   final MessageManager _messageManager;
   final AuthService _authService;
-  
+
+  // In-memory storage for active calls
+  final Map<String, CallState> _activeCalls = {};
+
   WebSocketHandler(this._userManager, this._messageManager) : _authService = AuthService(_userManager);
 
   /// Creates a WebSocket handler
@@ -118,10 +146,58 @@ class WebSocketHandler {
         }
         break;
         
+      case 'call_initiate':
+        if (currentUserId != null) {
+          await _handleCallInitiate(webSocket, message, currentUserId);
+        } else {
+          _sendError(webSocket, 'Authentication required');
+        }
+        break;
+
+      case 'call_accept':
+        if (currentUserId != null) {
+          await _handleCallAccept(webSocket, message, currentUserId);
+        } else {
+          _sendError(webSocket, 'Authentication required');
+        }
+        break;
+
+      case 'call_candidate':
+        if (currentUserId != null) {
+          await _handleCallCandidate(webSocket, message, currentUserId);
+        } else {
+          _sendError(webSocket, 'Authentication required');
+        }
+        break;
+
+      case 'call_end':
+        if (currentUserId != null) {
+          await _handleCallEnd(webSocket, message, currentUserId);
+        } else {
+          _sendError(webSocket, 'Authentication required');
+        }
+        break;
+
+      case 'call_restart':
+        if (currentUserId != null) {
+          await _handleCallRestart(webSocket, message, currentUserId);
+        } else {
+          _sendError(webSocket, 'Authentication required');
+        }
+        break;
+
+      case 'call_restart_answer':
+        if (currentUserId != null) {
+          await _handleCallRestartAnswer(webSocket, message, currentUserId);
+        } else {
+          _sendError(webSocket, 'Authentication required');
+        }
+        break;
+
       case 'ping':
         _sendResponse(webSocket, 'pong', {'timestamp': DateTime.now().toIso8601String()});
         break;
-        
+
       default:
         _sendError(webSocket, 'Unknown message type: $type');
     }
@@ -426,6 +502,266 @@ class WebSocketHandler {
     }
   }
   
+  /// Handles call initiation
+  Future<void> _handleCallInitiate(WebSocketChannel webSocket, Map<String, dynamic> message, String callerId) async {
+    try {
+      _logger.info('Call initiation request received from $callerId');
+      final recipientId = message['to'] as String?;
+      final offer = message['offer'] as String?;
+      final callId = message['call_id'] as String?;
+
+      _logger.info('Call details: recipientId=$recipientId, callId=$callId, offer_length=${offer?.length}');
+
+      if (recipientId == null || offer == null || callId == null) {
+        _logger.warning('Missing required fields for call initiation');
+        _sendError(webSocket, 'Missing required fields for call initiation');
+        return;
+      }
+
+      if (recipientId == callerId) {
+        _logger.warning('User $callerId attempted to call themselves');
+        _sendError(webSocket, 'Cannot call yourself');
+        return;
+      }
+
+      // Check if recipient exists and is online
+      final recipient = _userManager.getUser(recipientId);
+      if (recipient == null) {
+        _logger.warning('Recipient $recipientId not found');
+        _sendError(webSocket, 'Recipient not found');
+        return;
+      }
+
+      _logger.info('Recipient $recipientId found, checking online status...');
+      final isOnline = _userManager.isUserOnline(recipientId);
+      _logger.info('Recipient $recipientId online status: $isOnline');
+
+      // Store call state
+      _activeCalls[callId] = CallState(
+        id: callId,
+        callerId: callerId,
+        calleeId: recipientId,
+        status: CallStatus.initiated,
+        startTime: DateTime.now(),
+      );
+      _logger.info('Call state stored for callId: $callId');
+
+      // Forward offer to recipient if online
+      if (isOnline) {
+        _logger.info('Forwarding call offer to $recipientId...');
+        final success = await _userManager.sendToUser(recipientId, {
+          'type': 'call_offer',
+          'from': callerId,
+          'offer': offer,
+          'call_id': callId,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+
+        if (success) {
+          _logger.info('Call offer forwarded successfully: $callerId -> $recipientId (callId: $callId)');
+        } else {
+          _logger.error('Failed to forward call offer to $recipientId');
+          _sendError(webSocket, 'Failed to deliver call to recipient');
+          _activeCalls.remove(callId);
+        }
+      } else {
+        _logger.warning('Recipient $recipientId is offline, cannot initiate call');
+        _sendError(webSocket, 'Recipient is offline');
+        _activeCalls.remove(callId);
+      }
+    } catch (e) {
+      _logger.error('Call initiation error: $e');
+      _sendError(webSocket, 'Call initiation error: $e');
+    }
+  }
+
+  /// Handles call acceptance
+  Future<void> _handleCallAccept(WebSocketChannel webSocket, Map<String, dynamic> message, String calleeId) async {
+    try {
+      final answer = message['answer'] as String?;
+      final callId = message['call_id'] as String?;
+
+      if (answer == null || callId == null) {
+        _sendError(webSocket, 'Missing required fields for call acceptance');
+        return;
+      }
+
+      final call = _activeCalls[callId];
+      if (call == null || call.calleeId != calleeId) {
+        _sendError(webSocket, 'Call not found or unauthorized');
+        return;
+      }
+
+      // Update call status
+      call.status = CallStatus.connected;
+
+      // Forward answer to caller
+      await _userManager.sendToUser(call.callerId, {
+        'type': 'call_answer',
+        'from': calleeId,
+        'answer': answer,
+        'call_id': callId,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      _logger.info('Call accepted: ${call.callerId} <- $calleeId (callId: $callId)');
+    } catch (e) {
+      _sendError(webSocket, 'Call acceptance error: $e');
+    }
+  }
+
+  /// Handles ICE candidates
+  Future<void> _handleCallCandidate(WebSocketChannel webSocket, Map<String, dynamic> message, String senderId) async {
+    try {
+      final candidate = message['candidate'] as String?;
+      final callId = message['call_id'] as String?;
+
+      if (candidate == null || callId == null) {
+        _sendError(webSocket, 'Missing required fields for ICE candidate');
+        return;
+      }
+
+      final call = _activeCalls[callId];
+      if (call == null) {
+        _sendError(webSocket, 'Call not found');
+        return;
+      }
+
+      // Determine recipient
+      final recipientId = call.callerId == senderId ? call.calleeId : call.callerId;
+
+      // Forward candidate to recipient
+      await _userManager.sendToUser(recipientId, {
+        'type': 'call_candidate',
+        'from': senderId,
+        'candidate': candidate,
+        'call_id': callId,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      _logger.info('ICE candidate forwarded: $senderId -> $recipientId (callId: $callId)');
+    } catch (e) {
+      _sendError(webSocket, 'ICE candidate error: $e');
+    }
+  }
+
+  /// Handles call termination
+  Future<void> _handleCallEnd(WebSocketChannel webSocket, Map<String, dynamic> message, String senderId) async {
+    try {
+      final callId = message['call_id'] as String?;
+
+      if (callId == null) {
+        _sendError(webSocket, 'Missing call ID for call termination');
+        return;
+      }
+
+      final call = _activeCalls[callId];
+      if (call == null) {
+        _sendError(webSocket, 'Call not found');
+        return;
+      }
+
+      if (call.callerId != senderId && call.calleeId != senderId) {
+        _sendError(webSocket, 'Unauthorized call termination');
+        return;
+      }
+
+      // Update call status
+      call.status = CallStatus.ended;
+      call.endTime = DateTime.now();
+
+      // Determine recipient
+      final recipientId = call.callerId == senderId ? call.calleeId : call.callerId;
+
+      // Forward end message to recipient
+      await _userManager.sendToUser(recipientId, {
+        'type': 'call_end',
+        'from': senderId,
+        'call_id': callId,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      // Clean up call state after delay
+      Timer(const Duration(minutes: 1), () {
+        _activeCalls.remove(callId);
+      });
+
+      _logger.info('Call ended: $senderId -> $recipientId (callId: $callId)');
+    } catch (e) {
+      _sendError(webSocket, 'Call termination error: $e');
+    }
+  }
+
+  /// Handles call restart (ICE restart)
+  Future<void> _handleCallRestart(WebSocketChannel webSocket, Map<String, dynamic> message, String senderId) async {
+    try {
+      final offer = message['offer'] as String?;
+      final callId = message['call_id'] as String?;
+
+      if (offer == null || callId == null) {
+        _sendError(webSocket, 'Missing required fields for call restart');
+        return;
+      }
+
+      final call = _activeCalls[callId];
+      if (call == null) {
+        _sendError(webSocket, 'Call not found');
+        return;
+      }
+
+      // Determine recipient
+      final recipientId = call.callerId == senderId ? call.calleeId : call.callerId;
+
+      // Forward restart offer to recipient
+      await _userManager.sendToUser(recipientId, {
+        'type': 'call_restart',
+        'from': senderId,
+        'offer': offer,
+        'call_id': callId,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      _logger.info('Call restart initiated: $senderId -> $recipientId (callId: $callId)');
+    } catch (e) {
+      _sendError(webSocket, 'Call restart error: $e');
+    }
+  }
+
+  /// Handles call restart answer
+  Future<void> _handleCallRestartAnswer(WebSocketChannel webSocket, Map<String, dynamic> message, String senderId) async {
+    try {
+      final answer = message['answer'] as String?;
+      final callId = message['call_id'] as String?;
+
+      if (answer == null || callId == null) {
+        _sendError(webSocket, 'Missing required fields for call restart answer');
+        return;
+      }
+
+      final call = _activeCalls[callId];
+      if (call == null) {
+        _sendError(webSocket, 'Call not found');
+        return;
+      }
+
+      // Determine recipient
+      final recipientId = call.callerId == senderId ? call.calleeId : call.callerId;
+
+      // Forward restart answer to recipient
+      await _userManager.sendToUser(recipientId, {
+        'type': 'call_restart_answer',
+        'from': senderId,
+        'answer': answer,
+        'call_id': callId,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      _logger.info('Call restart answered: $senderId -> $recipientId (callId: $callId)');
+    } catch (e) {
+      _sendError(webSocket, 'Call restart answer error: $e');
+    }
+  }
+
   /// Generates a userId based on the public signing key
   String _generateUserIdFromPublicKey(String publicKey) {
     // Use the first 16 characters of the public key hash as userId
@@ -433,4 +769,15 @@ class WebSocketHandler {
     final digest = sha256.convert(bytes);
     return digest.toString().substring(0, 16).toUpperCase();
   }
+
+  // Test helper methods
+  void testHandleMessage(WebSocketChannel webSocket, Map<String, dynamic> message, String? userId) {
+    _handleMessage(webSocket, message, userId);
+  }
+
+  Future<String?> testHandleAuthAndGetUserId(WebSocketChannel webSocket, Map<String, dynamic> message) async {
+    return await _handleAuthAndGetUserId(webSocket, message);
+  }
+
+  Map<String, CallState> get testActiveCalls => _activeCalls;
 }
