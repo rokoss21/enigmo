@@ -58,7 +58,7 @@ lint: ## Run static analysis
 # Development
 dev-server: ## Start server in development mode
 	@echo "🖥️  Starting Enigmo server..."
-	cd enigmo_server && dart run bin/anongram_server.dart --host localhost --port 8081 --debug
+	cd enigmo_server && dart run bin/anongram_server.dart --host 0.0.0.0 --port 8081 --debug
 
 dev-app-ios: ## Start Flutter app on iOS
 	@echo "📱 Starting Enigmo app on iOS..."

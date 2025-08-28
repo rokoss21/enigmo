@@ -103,6 +103,8 @@ class AppLifecycleService {
   void _handleAppDetached() {
     print('INFO AppLifecycleService: App detached, performing cleanup');
     _performCleanup();
+    // Per privacy requirements, reset the session completely on app exit.
+    _networkService.resetSession();
   }
 
   /// App was hidden (web-specific)

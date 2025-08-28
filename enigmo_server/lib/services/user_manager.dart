@@ -42,9 +42,14 @@ class UserManager {
     required String publicEncryptionKey,
     String? nickname,
   }) async {
+    print('👤 UserManager.registerUser: Starting registration for user $id');
+
     if (_users.containsKey(id)) {
+      print('❌ UserManager.registerUser: User $id already exists');
       return null;
     }
+
+    print('✅ UserManager.registerUser: User $id is available for registration');
 
     final user = User(
       id: id,
@@ -56,7 +61,8 @@ class UserManager {
     );
 
     _users[id] = user;
-    print('INFO: User registered: $id');
+    print('✅ UserManager.registerUser: User $id successfully registered');
+    print('📊 UserManager.registerUser: Total users now: ${_users.length}');
     return user;
   }
 

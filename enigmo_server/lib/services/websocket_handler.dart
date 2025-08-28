@@ -198,6 +198,16 @@ class WebSocketHandler {
         _sendResponse(webSocket, 'pong', {'timestamp': DateTime.now().toIso8601String()});
         break;
 
+      case 'keepalive':
+        // Respond to keepalive ping - no response needed, just log
+        _logger.info('Keepalive ping received from user: $currentUserId');
+        break;
+
+      case 'user_status':
+        // Handle user status updates - acknowledge but don't broadcast
+        _logger.info('User status update received from user: $currentUserId');
+        break;
+
       default:
         _sendError(webSocket, 'Unknown message type: $type');
     }
@@ -206,18 +216,25 @@ class WebSocketHandler {
   /// Handles user registration
   Future<void> _handleRegister(WebSocketChannel webSocket, Map<String, dynamic> message) async {
     try {
+      _logger.info('🔐 Starting user registration process...');
+
       final publicSigningKey = message['publicSigningKey'] as String?;
       final publicEncryptionKey = message['publicEncryptionKey'] as String?;
       final nickname = message['nickname'] as String?;
-      
+
+      _logger.info('📝 Registration data: signingKey=${publicSigningKey?.substring(0, 20)}..., encryptionKey=${publicEncryptionKey?.substring(0, 20)}..., nickname=$nickname');
+
       if (publicSigningKey == null || publicEncryptionKey == null) {
+        _logger.warning('❌ Missing required fields for registration');
         _sendError(webSocket, 'Missing required fields');
         return;
       }
 
       // Generate userId based on the public signing key
       final userId = _generateUserIdFromPublicKey(publicSigningKey);
-      
+      _logger.info('🔑 Generated userId: $userId');
+
+      _logger.info('👤 Registering user with UserManager...');
       final user = await _userManager.registerUser(
         id: userId,
         publicSigningKey: publicSigningKey,
@@ -226,16 +243,20 @@ class WebSocketHandler {
       );
 
       if (user != null) {
+        _logger.info('✅ User registered successfully: ${user.id}');
         _sendResponse(webSocket, 'register_success', {
           'userId': user.id,
           'user': user.toJson(),
         });
-        
-        _logger.info('User registered: ${user.id}');
+
+        _logger.info('📤 Registration success response sent');
       } else {
+        _logger.error('❌ Registration failed: UserManager returned null');
         _sendError(webSocket, 'Registration error: could not create user');
       }
     } catch (e) {
+      _logger.error('❌ Registration exception: $e');
+      _logger.error('🔍 Exception details: ${e.toString()}');
       _sendError(webSocket, 'Registration error: $e');
     }
   }

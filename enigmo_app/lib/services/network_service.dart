@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/html.dart' if (dart.library.io) 'package:web_socket_channel/io.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/message.dart';
 import '../models/chat.dart';
 import 'key_manager.dart';
@@ -92,7 +94,34 @@ class NetworkService {
   }
 
   NetworkService._internal();
-  static const String _defaultServerUrl = 'wss://193.233.206.172:8081/ws';
+  static const String _defaultServerUrl = 'ws://localhost:8081/ws';
+  static const String _serverUrlKey = 'custom_server_url';
+
+  // Save custom server URL to preferences
+  static Future<void> saveServerUrl(String url) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_serverUrlKey, url);
+      print('NetworkService: Server URL saved: $url');
+    } catch (e) {
+      print('NetworkService: Error saving server URL: $e');
+    }
+  }
+
+  // Load custom server URL from preferences
+  static Future<String?> loadServerUrl() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedUrl = prefs.getString(_serverUrlKey);
+      if (savedUrl != null && savedUrl.isNotEmpty) {
+        print('NetworkService: Loaded saved server URL: $savedUrl');
+        return savedUrl;
+      }
+    } catch (e) {
+      print('NetworkService: Error loading server URL: $e');
+    }
+    return null;
+  }
   
   WebSocketChannel? _channel;
   // Single broadcast stream for all subscribers
@@ -172,7 +201,7 @@ class NetworkService {
   // Full reset of the current session: delete keys/ID, clear local caches and reconnect
   Future<bool> resetSession() async {
     try {
-      print('DEBUG NetworkService.resetSession: start');
+      print('🔄 NetworkService.resetSession: Starting session reset');
 
       // Clear local structures first
       _inMemoryByPeer.clear();
@@ -183,38 +212,48 @@ class NetworkService {
       _userId = null;
 
       // Delete keys and userId in storage
+      print('🗑️ NetworkService.resetSession: Clearing stored keys and user data');
       await KeyManager.deleteUserKeys();
 
-      // Disconnect existing connection
-      disconnect();
+      // Disconnect existing connection cleanly
+      print('🔌 NetworkService.resetSession: Disconnecting existing connection');
+      await disconnect();
+      
+      // Wait for cleanup to complete
+      await Future.delayed(const Duration(milliseconds: 500));
 
-      // Allow connect() to perform ephemeral cleanup again just in case
+      // Reset ephemeral init flag to allow key clearing on reconnect
       _ephemeralInitDone = false;
 
-      // New connection and registration/authentication
-      print('DEBUG NetworkService.resetSession: establishing new connection');
-      final connected = await connect();
+      // Establish new connection with ephemeral identity enabled
+      print('🔗 NetworkService.resetSession: Establishing new connection');
+      final connected = await connect(ephemeralIdentity: true);
       if (!connected) {
-        print('DEBUG NetworkService.resetSession: connection failed');
+        print('❌ NetworkService.resetSession: Connection failed');
         return false;
       }
 
-      // Give the connection a moment to stabilize
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      print('DEBUG NetworkService.resetSession: registering new user');
-      final registeredId = await registerUser();
+      // Register new user with fresh identity
+      print('📝 NetworkService.resetSession: Registering new user');
+      final registeredId = await registerUser(nickname: 'User');
       if (registeredId == null) {
-        print('DEBUG NetworkService.resetSession: registration failed');
+        print('❌ NetworkService.resetSession: Registration failed');
         return false;
       }
 
-      // After successful registration, the user is already authenticated
-      // No need for separate authentication step
-      print('DEBUG NetworkService.resetSession: session reset successful');
+      // After registration, we need to authenticate to establish the session
+      print('🔐 NetworkService.resetSession: Authenticating after registration...');
+      final authSuccess = await authenticate();
+      if (!authSuccess) {
+        print('❌ NetworkService.resetSession: Authentication failed after registration');
+        return false;
+      }
+      print('✅ NetworkService.resetSession: Authentication successful after registration');
+
+      print('✅ NetworkService.resetSession: Session reset successful with new ID: $registeredId');
       return true;
     } catch (e) {
-      print('DEBUG NetworkService.resetSession: error: $e');
+      print('❌ NetworkService.resetSession: Error during session reset: $e');
       return false;
     }
   }
@@ -271,98 +310,177 @@ class NetworkService {
     }
   }
 
-  String _resolveServerUrl() {
+  Future<String> _resolveServerUrl() async {
+    // First, check for saved custom server URL
+    final savedUrl = await loadServerUrl();
+    if (savedUrl != null) {
+      print('🔗 NetworkService._resolveServerUrl: Using saved server URL: $savedUrl');
+      return savedUrl;
+    }
+
+    // For web, allow overrides via query parameters for easier testing
     if (kIsWeb) {
-      // Allow explicit override via query: ?ws=ws://host:port/ws
       final wsOverride = Uri.base.queryParameters['ws'];
       if (wsOverride != null && wsOverride.isNotEmpty) {
-        print('DEBUG NetworkService._resolveServerUrl: Using explicit override: $wsOverride');
+        print('🔗 NetworkService._resolveServerUrl: Using explicit override: $wsOverride');
         return wsOverride;
       }
-
-      // Or port override via ?wsPort=NNNN
-      final portParam = Uri.base.queryParameters['wsPort'];
-      final port = int.tryParse(portParam ?? '') ?? 8081; // Changed default port to 8081
-
-      // On web use the page host. If it's 0.0.0.0 or empty, use localhost
-      var host = Uri.base.host;
-      if (host.isEmpty || host == '0.0.0.0') {
-        host = 'localhost';
-      }
-
-      // For Chrome debugging, if running on localhost, try 127.0.0.1
-      if (host == 'localhost') {
-        host = '127.0.0.1';
-      }
-
-      final scheme = Uri.base.scheme == 'https' ? 'wss' : 'ws';
-      final url = '$scheme://$host:$port/ws';
-      print('DEBUG NetworkService._resolveServerUrl: Resolved URL for web: $url');
-      return url;
-    } else {
-      // On mobile/desktop keep localhost by default
-      print('DEBUG NetworkService._resolveServerUrl: Using default URL for mobile: $_defaultServerUrl');
-      return _defaultServerUrl;
+      // Default for web development
+      print('🔗 NetworkService._resolveServerUrl: Using default for web: ws://localhost:8081/ws');
+      return 'ws://localhost:8081/ws';
     }
+
+    // For mobile (Android/iOS) and desktop
+    // Use 10.0.2.2 for Android emulator to connect to host's localhost
+    if (Platform.isAndroid) {
+      print('🔗 NetworkService._resolveServerUrl: Using Android emulator host: ws://10.0.2.2:8081/ws');
+      return 'ws://10.0.2.2:8081/ws';
+    }
+
+    // Default for iOS, macOS, Windows, Linux
+    print('🔗 NetworkService._resolveServerUrl: Using default for desktop/iOS: ws://localhost:8081/ws');
+    return 'ws://localhost:8081/ws';
+  }
+
+  // Get current server URL (for settings screen)
+  static Future<String> getCurrentServerUrl() async {
+    final savedUrl = await loadServerUrl();
+    if (savedUrl != null) {
+      return savedUrl;
+    }
+
+    if (kIsWeb) {
+      return 'ws://localhost:8081/ws';
+    }
+
+    if (Platform.isAndroid) {
+      return 'ws://10.0.2.2:8081/ws';
+    }
+
+    return 'ws://localhost:8081/ws';
   }
 
   /// Connect to Bootstrap server
-  Future<bool> connect({String? serverUrl, bool ephemeralIdentity = true}) async {
+  Future<bool> connect({String? serverUrl, bool ephemeralIdentity = false}) async {
     try {
-      // Ephemeral mode: on first connect, clear keys/ID so each launch is a new user
+      // Only clear keys if explicitly requested via resetSession()
+      // Removed automatic ephemeral clearing that was causing issues
       if (ephemeralIdentity && !_ephemeralInitDone) {
         try {
-          print('DEBUG NetworkService.connect: Ephemeral mode — clearing keys/ID on app start');
+          print('🔄 NetworkService.connect: Ephemeral mode — clearing keys for new session');
           await KeyManager.deleteUserKeys();
         } catch (e) {
-          print('DEBUG NetworkService.connect: Error clearing keys: $e');
+          print('❌ NetworkService.connect: Error clearing keys: $e');
         } finally {
           _ephemeralInitDone = true;
         }
       }
-      final url = serverUrl ?? _resolveServerUrl();
-      print('DEBUG NetworkService.connect: Attempting to connect to server: $url');
-      print('DEBUG NetworkService.connect: Running on ${kIsWeb ? "web" : "mobile/desktop"} platform');
       
-      _manualDisconnect = false; // Explicit connect cancels manual disconnect flag
-      _channel = WebSocketChannel.connect(Uri.parse(url));
+      final url = serverUrl ?? await _resolveServerUrl();
+      print('🔗 NetworkService.connect: Attempting to connect to server: $url');
+      print('📱 NetworkService.connect: Running on ${kIsWeb ? "web" : "mobile/desktop"} platform');
+      
+      // Disconnect existing connection if any
+      if (_channel != null) {
+        print('🔄 NetworkService.connect: Closing existing connection');
+        await disconnect();
+        await Future.delayed(const Duration(milliseconds: 200)); // Give time for cleanup
+      }
+      
+      _manualDisconnect = false;
+      
+      // Create connection with timeout
+      print('⏳ NetworkService.connect: Creating WebSocket connection...');
+      _channel = WebSocketChannel.connect(
+        Uri.parse(url),
+        protocols: ['websocket'], // Explicitly set protocol
+      );
       _messageController = StreamController<Map<String, dynamic>>.broadcast();
 
       // Create and store a broadcast stream so all subscriptions share the same stream
       _broadcastStream = _channel!.stream.asBroadcastStream();
 
+      // Test connection with a simple ping first
+      print('🏓 NetworkService.connect: Testing connection...');
+      
+      // Send a ping to verify connection works
+      try {
+        _channel!.sink.add('{"type":"ping","timestamp":"${DateTime.now().toIso8601String()}"}');
+      } catch (e) {
+        print('⚠️ NetworkService.connect: Failed to send initial ping: $e');
+      }
+      
       // Listen to incoming messages with the main handler
       _broadcastStream!.listen(
         (data) {
-          print('DEBUG: Received message from server: $data');
-          try {
-            _handleServerMessage(data as String);
-          } catch (e) {
-            print('Error handling incoming message: $e');
-          }
-        },
+           print('📨 NetworkService: Received message from server: $data');
+           try {
+             _handleServerMessage(data as String);
+           } catch (e) {
+             print('❌ NetworkService: Error handling incoming message: $e');
+             print('❌ Raw data that caused error: $data');
+           }
+         },
         onError: (error) {
-          print('DEBUG: WebSocket error: $error');
-          // Do not disconnect immediately; allow time for recovery
-          print('WebSocket error, but the connection may recover');
-        },
-        onDone: () {
-          print('DEBUG: WebSocket connection closed by server');
+          print('❌ NetworkService: WebSocket error: $error');
           _handleDisconnection();
           _scheduleReconnect();
         },
-        cancelOnError: false, // Do not close the stream on errors
+        onDone: () {
+          print('🔚 NetworkService: WebSocket connection closed by server');
+          _handleDisconnection();
+          _scheduleReconnect();
+        },
+        cancelOnError: false,
       );
+      
+      // Wait for connection to establish and receive pong
+      print('⏱️ NetworkService.connect: Waiting for connection to stabilize...');
+      await Future.delayed(const Duration(milliseconds: 1000)); // Increased timeout for mobile
+      
+      // Verify connection is working by checking if channel is still active
+      if (_channel?.closeCode != null) {
+        print('❌ NetworkService.connect: Connection failed immediately (close code: ${_channel?.closeCode})');
+        return false;
+      }
+      
+      // Additional verification - try to send a test message
+      try {
+        if (_channel?.sink != null) {
+          print('✅ NetworkService.connect: WebSocket sink is available and ready');
+        }
+      } catch (e) {
+        print('❌ NetworkService.connect: WebSocket sink test failed: $e');
+        return false;
+      }
       
       _isConnected = true;
       _connectionController.add(true);
       _reconnectAttempt = 0;
       _isReconnecting = false;
       _startHeartbeat();
-      print('Connected to server successfully');
+      
+      print('✅ NetworkService: Connected to server successfully!');
+      print('🌐 Server URL: $url');
+      print('🔗 Connection status: $_isConnected');
       return true;
     } catch (e) {
-      print('Error connecting to server: $e');
+      print('❌ NetworkService: Failed to connect to server!');
+      print('🔗 Error details: $e');
+      print('🌐 Server URL: $_defaultServerUrl');
+      print('📱 Platform: ${kIsWeb ? "web" : "mobile/desktop"}');
+
+      // Check for common connection issues
+      if (e.toString().contains('Connection refused')) {
+        print('🚫 Connection refused - check if server is running on port 8081');
+      } else if (e.toString().contains('Network is unreachable')) {
+        print('🚫 Network unreachable - check internet connection');
+      } else if (e.toString().contains('SSL')) {
+        print('🚫 SSL error - server certificate issue');
+      } else if (e.toString().contains('timeout')) {
+        print('🚫 Connection timeout - server may be slow to respond');
+      }
+
       _isConnected = false;
       _connectionController.add(false);
       _scheduleReconnect();
@@ -372,53 +490,76 @@ class NetworkService {
 
   /// Register a new user
   Future<String?> registerUser({String? nickname}) async {
+    print('🔐 NetworkService.registerUser: Starting user registration process...');
+
     if (!_isConnected || _channel == null) {
-      print('DEBUG NetworkService.registerUser: No connection, attempting to connect first');
+      print('🔗 NetworkService.registerUser: No connection, attempting to connect first');
       final connected = await connect();
       if (!connected) {
+        print('❌ NetworkService.registerUser: Failed to establish connection');
         throw Exception('No connection to server');
       }
-      await Future.delayed(const Duration(milliseconds: 100)); // Give connection time to stabilize
+      // Give more time for connection to stabilize
+      await Future.delayed(const Duration(milliseconds: 1000));
+      print('✅ NetworkService.registerUser: Connection established successfully');
     }
 
     try {
-      // Generate keys if they do not exist
+      print('🔑 NetworkService.registerUser: Generating user keys...');
+      
+      // Always generate fresh keys for new registration
       await KeyManager.generateUserKeys();
       final keys = await KeyManager.loadUserKeys();
-      
+
       if (keys == null) {
+        print('❌ NetworkService.registerUser: Failed to load keys');
         throw Exception('Failed to load keys');
       }
+      print('✅ NetworkService.registerUser: Keys generated and loaded successfully');
 
       final signingPublicKey = await keys.signingKeyPair.extractPublicKey();
       final encryptionPublicKey = await keys.encryptionKeyPair.extractPublicKey();
-      
+
+      final signingKeyStr = await KeyManager.publicKeyToString(signingPublicKey);
+      final encryptionKeyStr = await KeyManager.publicKeyToString(encryptionPublicKey);
+
+      print('📝 NetworkService.registerUser: Preparing registration message...');
       final message = {
         'type': 'register',
-        'publicSigningKey': await KeyManager.publicKeyToString(signingPublicKey),
-        'publicEncryptionKey': await KeyManager.publicKeyToString(encryptionPublicKey),
-        'nickname': nickname,
+        'publicSigningKey': signingKeyStr,
+        'publicEncryptionKey': encryptionKeyStr,
+        'nickname': nickname ?? 'User',
         'timestamp': DateTime.now().toIso8601String(),
       };
 
+      print('📤 NetworkService.registerUser: Sending registration to server...');
       _sendMessage(message);
+
+      print('⏳ NetworkService.registerUser: Waiting for server response (15s timeout)...');
+      // Wait for server response with longer timeout
+      final response = await _waitForResponse('register_success', timeout: const Duration(seconds: 15));
       
-      // Wait for server response
-      final response = await _waitForResponse('register_success');
       if (response != null) {
         _userId = response['userId'] as String?;
+        print('✅ NetworkService.registerUser: Registration successful! UserId: $_userId');
+        
         if (_userId != null) {
           // Save userId from server response in KeyManager
           await KeyManager.setUserId(_userId!);
-          print('userId saved in KeyManager: $_userId');
+          print('💾 NetworkService.registerUser: userId saved in KeyManager: $_userId');
+          print('🎉 NetworkService.registerUser: User registration completed successfully');
+          return _userId;
         }
-        print('User registered: $_userId');
-        return _userId;
       }
       
+      print('❌ NetworkService.registerUser: Registration failed - no valid response');
       return null;
+
     } catch (e) {
-      print('Registration error: $e');
+      print('❌ NetworkService.registerUser: Registration error: $e');
+      if (e.toString().contains('Server error')) {
+        print('🔍 NetworkService.registerUser: Server rejected registration: ${e.toString()}');
+      }
       return null;
     }
   }
@@ -426,34 +567,32 @@ class NetworkService {
   /// Authenticate the user
   Future<bool> authenticate() async {
     if (!_isConnected || _channel == null) {
-      print('DEBUG NetworkService.authenticate: No connection, attempting to connect first');
+      print('🔗 NetworkService.authenticate: No connection, attempting to connect first');
       final connected = await connect();
       if (!connected) {
+        print('❌ NetworkService.authenticate: Connection failed');
         throw Exception('No connection to server');
       }
-      await Future.delayed(const Duration(milliseconds: 100)); // Give connection time to stabilize
+      await Future.delayed(const Duration(milliseconds: 500));
     }
 
     try {
       var storedUserId = await KeyManager.getUserId();
-      print('Attempting authentication with userId: $storedUserId');
+      print('🔐 NetworkService.authenticate: Attempting authentication with userId: $storedUserId');
+      
       if (storedUserId == null) {
-        // Auto-register if userId is missing (after cleanup for ephemeral mode)
-        print('User ID not found — performing auto-registration');
-        storedUserId = await registerUser();
-        if (storedUserId == null) {
-          print('Auto-registration failed');
-          return false;
-        }
+        print('❌ NetworkService.authenticate: No stored userId, authentication not possible');
+        return false;
       }
-      _userId = storedUserId;
-
+      
       final keys = await KeyManager.loadUserKeys();
       if (keys == null) {
-        print('User keys not found');
+        print('❌ NetworkService.authenticate: No user keys found');
         return false;
       }
 
+      _userId = storedUserId;
+      
       final timestamp = DateTime.now().toIso8601String();
       final signature = await CryptoEngine.signData(timestamp);
 
@@ -464,23 +603,24 @@ class NetworkService {
         'timestamp': timestamp,
       };
 
+      print('📤 NetworkService.authenticate: Sending auth message to server');
       _sendMessage(message);
       
-      // Wait for server response
-      final response = await _waitForResponse('auth_success');
+      // Wait for server response with timeout
+      print('⏳ NetworkService.authenticate: Waiting for server response...');
+      final response = await _waitForResponse('auth_success', timeout: const Duration(seconds: 10));
+      
       if (response != null && response['success'] == true) {
-        print('Authentication successful');
-        // _userId already set above, keep auth state
-        print('After successful authentication: _isConnected=$_isConnected, _userId=$_userId');
+        print('✅ NetworkService.authenticate: Authentication successful');
+        print('🔗 Connection state: _isConnected=$_isConnected, _userId=$_userId');
         return true;
       } else {
-        // If authentication failed, reset _userId
-        _userId = null;
+        print('❌ NetworkService.authenticate: Server rejected authentication');
+        // Keep userId but mark auth as failed - user may need to re-register
+        return false;
       }
-      
-      return false;
     } catch (e) {
-      print('Authentication error: $e');
+      print('❌ NetworkService.authenticate: Authentication error: $e');
       return false;
     }
   }
@@ -631,6 +771,19 @@ class NetworkService {
       print('DEBUG NetworkService._handleServerMessage: Message type: $type');
 
       switch (type) {
+        case 'ping':
+          // Respond to ping with pong
+          try {
+            _channel?.sink.add('{"type":"pong","timestamp":"${DateTime.now().toIso8601String()}"}');
+            print('🏓 NetworkService: Responded to ping with pong');
+          } catch (e) {
+            print('❌ NetworkService: Failed to send pong: $e');
+          }
+          break;
+        case 'pong':
+          print('🏓 NetworkService: Received pong from server');
+          _lastPongAt = DateTime.now();
+          break;
         case 'new_message':
           print('DEBUG NetworkService: Received new_message');
           // Server sends { type: 'new_message', message: {...} }
@@ -739,6 +892,10 @@ class NetworkService {
           _handleUserStatusUpdate(jsonData);
           break;
         case 'pong':
+          break;
+        case 'auth_success':
+          print('DEBUG NetworkService: Received auth_success');
+          // Authentication successful - server has established our session
           break;
         case 'error':
           print('Server error: ${jsonData['message']}');
@@ -966,15 +1123,51 @@ class NetworkService {
     );
   }
 
-  void disconnect() {
+  Future<void> disconnect() async {
+    print('🔌 NetworkService.disconnect: Disconnecting from server');
+    _manualDisconnect = true; // Mark as manual disconnect to prevent auto-reconnect
+    
+    // Stop all timers
     _stopHeartbeat();
+    _heartbeatTimer?.cancel();
     _reconnectTimer?.cancel();
-    _channel?.sink.close();
+    
+    // Close WebSocket connection gracefully
+    if (_channel != null) {
+      try {
+        await _channel!.sink.close();
+      } catch (e) {
+        print('⚠️ NetworkService.disconnect: Error closing WebSocket: $e');
+      }
+      _channel = null;
+    }
+    
+    // Clean up controllers and streams
+    if (_messageController != null && !_messageController!.isClosed) {
+      await _messageController!.close();
+      _messageController = null;
+    }
+    
+    _broadcastStream = null;
     _isConnected = false;
+    _connectionController.add(false);
+    
+    print('✅ NetworkService.disconnect: Disconnection completed');
   }
 
   void dispose() {
-    disconnect();
+    // Use the non-async version for dispose to avoid issues
+    _manualDisconnect = true;
+    _stopHeartbeat();
+    _heartbeatTimer?.cancel();
+    _reconnectTimer?.cancel();
+    _channel?.sink.close();
+    _channel = null;
+    _messageController?.close();
+    _messageController = null;
+    _broadcastStream = null;
+    _isConnected = false;
+    
     _newMessageController.close();
     _chatsController.close();
     _usersController.close();
@@ -999,44 +1192,66 @@ class NetworkService {
   }
 
   Future<Map<String, dynamic>?> _waitForResponse(String expectedType, {Duration timeout = const Duration(seconds: 10)}) async {
+    print('⏳ NetworkService._waitForResponse: Waiting for response type: $expectedType (timeout: ${timeout.inSeconds}s)');
+
     try {
       final completer = Completer<Map<String, dynamic>>();
       late StreamSubscription subscription;
-      
+
       // Listen via unified _broadcastStream to avoid duplicate subscriptions
       final bs = _broadcastStream;
       if (bs == null) {
+        print('❌ NetworkService._waitForResponse: Broadcast stream not initialized');
         throw StateError('Broadcast stream not initialized');
       }
+
+      print('👂 NetworkService._waitForResponse: Listening for server response...');
       subscription = bs.listen(
         (data) {
           try {
+            print('📨 NetworkService._waitForResponse: Received data: $data');
             final message = jsonDecode(data);
+            print('📨 NetworkService._waitForResponse: Parsed message type: ${message['type']}');
+
             if (message['type'] == expectedType) {
+              print('✅ NetworkService._waitForResponse: Expected response received!');
               subscription.cancel();
               if (!completer.isCompleted) {
                 completer.complete(message);
               }
+            } else if (message['type'] == 'error') {
+              print('❌ NetworkService._waitForResponse: Server error received: ${message['message']}');
+              subscription.cancel();
+              if (!completer.isCompleted) {
+                completer.completeError(Exception('Server error: ${message['message']}'));
+              }
+            } else {
+              print('⏭️ NetworkService._waitForResponse: Ignoring message type: ${message['type']}');
             }
           } catch (e) {
-            print('Error parsing response: $e');
+            print('❌ NetworkService._waitForResponse: Error parsing response: $e');
+            print('❌ NetworkService._waitForResponse: Raw data: $data');
           }
         },
         onError: (error) {
+          print('❌ NetworkService._waitForResponse: Stream error: $error');
           if (!completer.isCompleted) {
             completer.completeError(error);
           }
         },
         onDone: () {
+          print('🔚 NetworkService._waitForResponse: Stream closed');
           if (!completer.isCompleted) {
             completer.complete(null);
           }
         },
       );
-      
-      return await completer.future.timeout(timeout);
+
+      final result = await completer.future.timeout(timeout);
+      print('✅ NetworkService._waitForResponse: Response received successfully');
+      return result;
     } catch (e) {
-      print('Error waiting for response $expectedType: $e');
+      print('❌ NetworkService._waitForResponse: Error waiting for response $expectedType: $e');
       return null;
     }
   }

@@ -170,17 +170,18 @@ class AudioCallService {
         {'urls': 'stun:stun.l.google.com:19302'},
         {'urls': 'stun:stun1.l.google.com:19302'},
         {'urls': 'stun:stun2.l.google.com:19302'},
-        // Production TURN servers
-        {
-          'urls': 'turn:193.233.206.172:3478',
-          'username': 'enigmo',
-          'credential': 'enigmo123'
-        },
-        {
-          'urls': 'turn:193.233.206.172:5349',
-          'username': 'enigmo',
-          'credential': 'enigmo123'
-        }
+        // TURN servers disabled for local development
+        // TODO: Configure local TURN servers for production
+        // {
+        //   'urls': 'turn:localhost:3478',
+        //   'username': 'enigmo',
+        //   'credential': 'enigmo123'
+        // },
+        // {
+        //   'urls': 'turn:localhost:5349',
+        //   'username': 'enigmo',
+        //   'credential': 'enigmo123'
+        // }
       ],
       'iceTransportPolicy': 'all',
       'bundlePolicy': 'max-bundle',

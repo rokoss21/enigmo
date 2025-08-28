@@ -53,40 +53,121 @@ class _ChatListScreenState extends State<ChatListScreen> {
   /// Full session reset: clear local data, new ID, and reconnect
   Future<void> _resetAll() async {
     if (_isResetting) return;
+    
+    print('🔄 ChatListScreen._resetAll: Starting session reset');
+    
     setState(() {
       _isResetting = true;
       _isConnecting = true;
     });
+    
     try {
+      // Cancel any ongoing timers
       _refreshTimer?.cancel();
+      
+      // Clear local UI state
       setState(() {
         _chats.clear();
         _activeChatUserId = null;
+        _isConnected = false;
       });
 
+      print('🔄 ChatListScreen._resetAll: Calling NetworkService.resetSession()');
       final ok = await _networkService.resetSession();
+      
       if (!mounted) return;
+      
       if (ok) {
+        print('✅ ChatListScreen._resetAll: Session reset successful');
         setState(() {
           _currentUserId = _networkService.userId;
           _isConnected = true;
         });
+        
+        // Restart periodic refresh and setup listeners
         _startPeriodicRefresh();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('New session created. You received a new ID')),
-        );
+        
+        // Try to initialize online statuses
+        try {
+          await _networkService.getUsers();
+        } catch (e) {
+          print('⚠️ ChatListScreen._resetAll: Could not load users list: $e');
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('✅ New session created successfully!', style: TextStyle(fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 4),
+                  Text('Your new ID: ${_currentUserId ?? 'Unknown'}', style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+                ],
+              ),
+              backgroundColor: Colors.green.shade700,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       } else {
+        print('❌ ChatListScreen._resetAll: Session reset failed');
         setState(() {
           _isConnected = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to create a new session'), backgroundColor: Colors.red),
-        );
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Failed to create new session', style: TextStyle(fontWeight: FontWeight.w500)),
+                  SizedBox(height: 4),
+                  Text('Please check your connection and try again', style: TextStyle(fontSize: 12)),
+                ],
+              ),
+              backgroundColor: Colors.red.shade700,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.white,
+                onPressed: () => _resetAll(),
+              ),
+            ),
+          );
+        }
       }
     } catch (e) {
+      print('❌ ChatListScreen._resetAll: Error during reset: $e');
       if (!mounted) return;
+      
+      setState(() {
+        _isConnected = false;
+      });
+      
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Session reset failed', style: TextStyle(fontWeight: FontWeight.w500)),
+              const SizedBox(height: 4),
+              Text('Error: ${e.toString().length > 100 ? '${e.toString().substring(0, 100)}...' : e.toString()}', 
+                   style: const TextStyle(fontSize: 11)),
+            ],
+          ),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: () => _resetAll(),
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -99,60 +180,63 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   Future<void> _initializeNetwork() async {
-    print('INFO ChatListScreen._initializeNetwork: Starting network initialization');
+    print('🚀 ChatListScreen._initializeNetwork: Starting network initialization');
     
     setState(() {
       _isConnecting = true;
     });
 
     try {
-      // Connect to the server
-      print('INFO ChatListScreen._initializeNetwork: Connecting to server');
-      final connected = await _networkService.connect();
+      // Step 1: Connect to the server
+      print('🔗 ChatListScreen._initializeNetwork: Connecting to server');
+      final connected = await _networkService.connect(ephemeralIdentity: false);
       
       if (!connected) {
-        throw Exception('Failed to connect to server');
+        throw Exception('Failed to connect to server - server may be unreachable');
       }
       
-      print('INFO ChatListScreen._initializeNetwork: Connected to server successfully');
+      print('✅ ChatListScreen._initializeNetwork: Connected to server successfully');
       
-      // Check if there is a stored userId
+      // Step 2: Check for existing user credentials
       final storedUserId = await KeyManager.getUserId();
-      print('INFO ChatListScreen._initializeNetwork: Stored userId: $storedUserId');
+      print('🔍 ChatListScreen._initializeNetwork: Stored userId: $storedUserId');
       
-      bool needsRegistration = storedUserId == null;
+      String? finalUserId;
       
-      if (!needsRegistration) {
+      if (storedUserId != null) {
+        // Try to authenticate with existing credentials
+        print('🔐 ChatListScreen._initializeNetwork: Attempting authentication with existing userId');
         try {
-          print('INFO ChatListScreen._initializeNetwork: Attempting authentication with existing userId');
-          // Try to authenticate with existing userId
           final authenticated = await _networkService.authenticate();
-          if (!authenticated) {
-            print('WARNING ChatListScreen._initializeNetwork: Authentication failed, registration required');
-            needsRegistration = true;
+          if (authenticated) {
+            print('✅ ChatListScreen._initializeNetwork: Authentication successful');
+            finalUserId = storedUserId;
           } else {
-            print('INFO ChatListScreen._initializeNetwork: Authentication successful');
+            print('⚠️ ChatListScreen._initializeNetwork: Authentication failed - may need new registration');
           }
         } catch (e) {
-          print('ERROR ChatListScreen._initializeNetwork: Authentication error: $e');
-          needsRegistration = true;
+          print('❌ ChatListScreen._initializeNetwork: Authentication error: $e');
         }
       }
       
-      if (needsRegistration) {
-        print('INFO ChatListScreen._initializeNetwork: Registering new user');
-        // If authentication failed, register a new user
-        final userId = await _networkService.registerUser(nickname: 'User');
-        if (userId != null) {
-          print('INFO ChatListScreen._initializeNetwork: User registered: $userId');
-          final authSuccess = await _networkService.authenticate();
-          if (!authSuccess) {
-            throw Exception('Failed to authenticate after registration');
-          }
-          print('INFO ChatListScreen._initializeNetwork: Authentication after registration successful');
-        } else {
-          throw Exception('Failed to register user');
+      // Step 3: Register new user if authentication failed or no stored credentials
+      if (finalUserId == null) {
+        print('📝 ChatListScreen._initializeNetwork: Registering new user');
+        finalUserId = await _networkService.registerUser(nickname: 'User');
+
+        if (finalUserId == null) {
+          throw Exception('Failed to register user - server may have issues');
         }
+
+        print('✅ ChatListScreen._initializeNetwork: User registered: $finalUserId');
+
+        // After registration, we need to authenticate to establish the session
+        print('🔐 ChatListScreen._initializeNetwork: Authenticating after registration...');
+        final authSuccess = await _networkService.authenticate();
+        if (!authSuccess) {
+          throw Exception('Failed to authenticate after registration');
+        }
+        print('✅ ChatListScreen._initializeNetwork: Authentication successful after registration');
       }
       
       // Load chats list
@@ -220,21 +304,45 @@ class _ChatListScreenState extends State<ChatListScreen> {
         await _networkService.getUsers();
       } catch (_) {}
       
-      print('INFO ChatListScreen._initializeNetwork: Network initialization finished successfully');
+      print('🎉 ChatListScreen._initializeNetwork: Network initialization completed successfully');
     } catch (e, stackTrace) {
-      print('ERROR ChatListScreen._initializeNetwork: Network initialization error: $e');
-      print('STACK: $stackTrace');
+      print('❌ ChatListScreen._initializeNetwork: Network initialization error: $e');
+      print('📍 Stack trace: $stackTrace');
       
       setState(() {
         _isConnected = false;
       });
       
       if (mounted) {
+        String userFriendlyMessage;
+        if (e.toString().contains('server may be unreachable')) {
+          userFriendlyMessage = 'Cannot connect to server. Please check your internet connection and try again.';
+        } else if (e.toString().contains('Failed to register user')) {
+          userFriendlyMessage = 'Failed to create user account. Server may be experiencing issues.';
+        } else if (e.toString().contains('WebSocket')) {
+          userFriendlyMessage = 'Connection error. Please tap "New Session" to try again.';
+        } else {
+          userFriendlyMessage = 'Connection failed. Please check your network and try again.';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Server connection error: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(userFriendlyMessage, style: const TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 4),
+                Text('Tap the refresh button to try again', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.8))),
+              ],
+            ),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 6),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () => _initializeNetwork(),
+            ),
           ),
         );
       }

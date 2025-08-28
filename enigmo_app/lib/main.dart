@@ -11,8 +11,26 @@ import 'services/incoming_call_handler.dart';
 void main() {
   // Initialize Flutter binding
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Set up the lifecycle observer without tying it to a widget
+  final lifecycleObserver = AppLifecycleObserver();
+  WidgetsBinding.instance.addObserver(lifecycleObserver);
 
   runApp(const AnogramApp());
+}
+
+/// A standalone observer to prevent widget rebuilds on lifecycle changes.
+class AppLifecycleObserver with WidgetsBindingObserver {
+  final AppLifecycleService _lifecycleService = AppLifecycleService();
+
+  AppLifecycleObserver() {
+    _lifecycleService.initialize();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleService.handleAppLifecycleChange(state);
+  }
 }
 
 class AnogramApp extends StatefulWidget {
@@ -22,41 +40,19 @@ class AnogramApp extends StatefulWidget {
   State<AnogramApp> createState() => _AnogramAppState();
 }
 
-class _AnogramAppState extends State<AnogramApp> with WidgetsBindingObserver {
-  late final AppLifecycleService _lifecycleService;
+class _AnogramAppState extends State<AnogramApp> {
   late final AudioCallService _audioCallService;
   late final CallNotificationService _callNotificationService;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _lifecycleService = AppLifecycleService();
-
     // Initialize audio call services
     // In a real app, these would be properly injected
     final networkService = NetworkService(); // This would need proper initialization
     final cryptoEngine = CryptoEngine(); // This would need proper initialization
     _audioCallService = AudioCallService(networkService, cryptoEngine);
     _callNotificationService = CallNotificationService(_audioCallService);
-
-    // Defer initialization to after first frame so the app UI always renders
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _lifecycleService.initialize();
-    });
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _lifecycleService.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    _lifecycleService.handleAppLifecycleChange(state);
   }
 
   @override
