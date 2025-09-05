@@ -117,7 +117,18 @@ class WebSocketHandler {
           _sendError(webSocket, 'Authentication required');
         }
         break;
-        
+
+      case 'call_offer':
+      case 'call_answer':
+      case 'ice_candidate':
+      case 'end_call':
+        if (currentUserId != null) {
+          await _handleCallSignal(message, currentUserId);
+        } else {
+          _sendError(webSocket, 'Authentication required');
+        }
+        break;
+
       case 'ping':
         _sendResponse(webSocket, 'pong', {'timestamp': DateTime.now().toIso8601String()});
         break;
@@ -353,6 +364,16 @@ class WebSocketHandler {
     } catch (e) {
       _logger.warning('Error sending response: $e');
     }
+  }
+
+  Future<void> _handleCallSignal(Map<String, dynamic> message, String senderId) async {
+    final targetId = message['target_user_id'] as String?;
+    if (targetId == null) {
+      return;
+    }
+    final relay = Map<String, dynamic>.from(message);
+    relay['sender_id'] = senderId;
+    await _userManager.sendToUser(targetId, relay);
   }
 
   /// Handles adding a user to a chat

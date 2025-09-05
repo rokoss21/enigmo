@@ -7,6 +7,7 @@ import '../models/message.dart';
 import '../models/chat.dart';
 import 'key_manager.dart';
 import 'crypto_engine.dart';
+import 'call_service.dart';
 // Import lifecycle service for background message handling
 // Note: Using late initialization to avoid circular dependency
 
@@ -133,6 +134,7 @@ class NetworkService {
   final Map<String, List<Message>> _inMemoryByPeer = {};
   // Lifecycle service for background message handling (late init to avoid circular dependency)
   dynamic _lifecycleService; // Will be AppLifecycleService when initialized
+  CallService? _callService;
 
   // Local structure for deferred messages
   // ignore: unused_element
@@ -167,6 +169,14 @@ class NetworkService {
     } catch (e) {
       print('DEBUG NetworkService.clearPeerSession: error: $e');
     }
+  }
+
+  void attachCallService(CallService service) {
+    _callService = service;
+  }
+
+  void sendCallSignal(Map<String, dynamic> signal) {
+    _sendMessage(signal);
   }
 
   // Full reset of the current session: delete keys/ID, clear local caches and reconnect
@@ -668,6 +678,12 @@ class NetworkService {
           _handleUserStatusUpdate(jsonData);
           break;
         case 'pong':
+          break;
+        case 'call_offer':
+        case 'call_answer':
+        case 'ice_candidate':
+        case 'end_call':
+          _callService?.handleSignal(jsonData);
           break;
         case 'error':
           print('Server error: ${jsonData['message']}');
