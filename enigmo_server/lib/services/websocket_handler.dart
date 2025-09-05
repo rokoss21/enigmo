@@ -392,7 +392,7 @@ class WebSocketHandler {
         'id': targetUserId,
         'nickname': targetUser.nickname ?? targetUserId,
         'isOnline': _userManager.isUserOnline(targetUserId),
-        'lastSeen': targetUser.lastSeen?.toIso8601String() ?? DateTime.now().toIso8601String(),
+        'lastSeen': targetUser.lastSeen.toIso8601String(),
       };
       
       // Confirm to initiator that the user was added

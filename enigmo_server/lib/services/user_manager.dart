@@ -8,6 +8,7 @@ class UserManager {
   final Map<String, User> _users = {};
   final Map<String, WebSocketChannel> _userChannels = {};
   final Map<WebSocketChannel, String> _channelToUserId = {};
+  static const Duration _tokenValidity = Duration(hours: 1);
 
   UserManager() {
     _initializeDefaultUsers();
@@ -76,21 +77,35 @@ class UserManager {
 
   /// Gets a user by token (simplified implementation)
   User? getUserByToken(String token) {
-    // Extract userId from token format: token_userId_timestamp_random
-    if (token.startsWith('token_')) {
-      final parts = token.split('_');
-      if (parts.length >= 4) {
-        // For new format: token_userId_timestamp_random
-        // Join parts 1 to (length-2) to handle userIds with underscores
-        final userId = parts.sublist(1, parts.length - 2).join('_');
-        return _users[userId];
-      } else if (parts.length == 3) {
-        // For old format: token_userId_timestamp
-        final userId = parts[1];
-        return _users[userId];
-      }
+    // Expected format: token_userId_timestamp_random(6 digits)
+    if (!token.startsWith('token_')) {
+      return null;
     }
-    return null;
+
+    final parts = token.split('_');
+    if (parts.length < 4) {
+      return null;
+    }
+
+    // Join parts 1..length-2 to support userIds with underscores
+    final userId = parts.sublist(1, parts.length - 2).join('_');
+    final timestamp = int.tryParse(parts[parts.length - 2]);
+    final randomPart = parts.last;
+
+    if (timestamp == null) {
+      return null;
+    }
+
+    if (randomPart.length != 6 || int.tryParse(randomPart) == null) {
+      return null;
+    }
+
+    final age = DateTime.now().microsecondsSinceEpoch - timestamp;
+    if (age > _tokenValidity.inMicroseconds) {
+      return null;
+    }
+
+    return _users[userId];
   }
 
   void connectUser(String userId, WebSocketChannel channel) {

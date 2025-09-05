@@ -19,6 +19,7 @@ class AnogramServer {
   late final MessageManager _messageManager;
   late final WebSocketHandler _webSocketHandler;
   late final HttpServer _server;
+  late final DateTime _startTime;
   
   /// Initializes the server
   Future<void> initialize({
@@ -51,6 +52,7 @@ class AnogramServer {
           .addHandler(router);
 
       // Start server
+      _startTime = DateTime.now();
       _server = await serve(handler, host, port);
       
       _logger.info('Anongram Bootstrap Server started at http://${_server.address.host}:${_server.port}');
@@ -66,11 +68,12 @@ class AnogramServer {
 
   /// Health check handler
   Response _handleHealthCheck(Request request) {
+    final uptime = DateTime.now().difference(_startTime).inSeconds;
     final healthData = {
       'status': 'ok',
       'timestamp': DateTime.now().toIso8601String(),
       'version': '1.0.0',
-      'uptime': DateTime.now().toIso8601String(),
+      'uptime': uptime,
     };
     
     return Response.ok(
@@ -84,10 +87,11 @@ class AnogramServer {
     try {
       final userStats = _userManager.getUserStats();
       final messageStats = _messageManager.getMessageStats();
-      
+
+      final uptime = DateTime.now().difference(_startTime).inSeconds;
       final stats = {
         'server': {
-          'uptime': DateTime.now().toIso8601String(),
+          'uptime': uptime,
           'version': '1.0.0',
           'status': 'running',
         },
