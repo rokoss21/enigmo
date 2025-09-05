@@ -189,16 +189,13 @@ class MessageManager {
   }
 
   void _clearConversationCache(String userId1, String userId2) {
-    final keys = _conversationCache.keys.where((key) => 
-        (key.contains(userId1) && key.contains(userId2))).toList();
-    for (final key in keys) {
-      _conversationCache.remove(key);
-    }
+    final key = _getCacheKey(userId1, userId2);
+    _conversationCache.remove(key);
   }
 
   String _generateMessageId() {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final randomSuffix = _random.nextInt(999999).toString().padLeft(6, '0');
+    final randomSuffix = _random.nextInt(1000000).toString().padLeft(6, '0');
     return '${timestamp}_${randomSuffix}';
   }
 
