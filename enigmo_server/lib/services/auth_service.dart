@@ -24,8 +24,8 @@ class AuthService {
   String generateToken(String userId) {
     // Ensure uniqueness with microsecond precision and random component
     final now = DateTime.now();
-    final timestamp = '${now.millisecondsSinceEpoch}${now.microsecond.toString().padLeft(3, '0')}';
-    final random = Random().nextInt(999999).toString().padLeft(6, '0');
+    final timestamp = now.microsecondsSinceEpoch.toString();
+    final random = Random().nextInt(1000000).toString().padLeft(6, '0');
     return 'token_${userId}_${timestamp}_$random';
   }
 

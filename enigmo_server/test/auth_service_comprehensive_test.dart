@@ -73,9 +73,64 @@ void main() {
       });
 
       test('should reject token for non-existent user', () {
-        const token = 'token_nonexistent_user_123456789';
+        final timestamp = DateTime.now().microsecondsSinceEpoch;
+        const randomPart = '654321';
+        final token = 'token_nonexistent_user_${timestamp}_${randomPart}';
         final isValid = authService.isValidToken(token);
-        
+
+        expect(isValid, isFalse);
+      });
+
+      test('should reject expired token', () async {
+        const userId = 'expired_token_user';
+
+        await userManager.registerUser(
+          id: userId,
+          publicSigningKey: base64Encode(testSigningPublicKey.bytes),
+          publicEncryptionKey: 'test_encryption_key',
+        );
+
+        final oldTimestamp = DateTime.now()
+            .subtract(const Duration(hours: 2))
+            .microsecondsSinceEpoch;
+        const randomPart = '123456';
+        final expiredToken = 'token_${userId}_${oldTimestamp}_${randomPart}';
+
+        final isValid = authService.isValidToken(expiredToken);
+
+        expect(isValid, isFalse);
+      });
+
+      test('should reject token without random component', () async {
+        const userId = 'no_random_user';
+
+        await userManager.registerUser(
+          id: userId,
+          publicSigningKey: base64Encode(testSigningPublicKey.bytes),
+          publicEncryptionKey: 'test_encryption_key',
+        );
+
+        final timestamp = DateTime.now().microsecondsSinceEpoch;
+        final token = 'token_${userId}_${timestamp}';
+        final isValid = authService.isValidToken(token);
+
+        expect(isValid, isFalse);
+      });
+
+      test('should reject token with non-numeric random part', () async {
+        const userId = 'nonnumeric_random_user';
+
+        await userManager.registerUser(
+          id: userId,
+          publicSigningKey: base64Encode(testSigningPublicKey.bytes),
+          publicEncryptionKey: 'test_encryption_key',
+        );
+
+        final timestamp = DateTime.now().microsecondsSinceEpoch;
+        const randomPart = 'abcdef';
+        final token = 'token_${userId}_${timestamp}_${randomPart}';
+        final isValid = authService.isValidToken(token);
+
         expect(isValid, isFalse);
       });
 
